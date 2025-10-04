@@ -1,0 +1,52 @@
+# === Gradle ===
+.gradle/
+**/build/
+**/out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# === Android Studio / IntelliJ ===
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# === Local config ===
+local.properties
+/.vscode/
+
+# === NDK/CMake ===
+.cxx/
+.externalNativeBuild/
+
+# === Captures / profiling ===
+captures/
+*.hprof
+*.trace
+*.cvrf
+
+# === Artifacts ===
+*.apk
+*.ap_ 
+*.aab
+app/release/
+app/debug/
+
+# === Logs / OS ===
+*.log
+.DS_Store
+Thumbs.db
+
+# === Keystores & secrets (đừng commit khoá ký) ===
+*.jks
+*.keystore
+keystore.properties
+*.pem
+*.p12
+*.key
+*.pk8
+
+# === Room schema export (nếu không muốn version hoá thì để dòng dưới mở) ===
+# app/schemas/
+
+# === Firebase/Google services ===
+# google-services.json  # (thường có thể commit; để comment nếu chưa dùng)
