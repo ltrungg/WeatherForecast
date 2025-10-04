@@ -11,12 +11,19 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.example.weatherforecast.data.WeatherDb;
 import com.example.weatherforecast.data.WeatherRepository;
+import com.example.weatherforecast.network.OpenMeteoClient;
 
-import java.util.Collections;
+import java.util.Locale;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
     private WeatherRepository repo;
+
+    // view refs
+    private TextView tvCity, tvUpdatedAt, tvTemp, tvCondition, tvFeelsLike, tvHumidity, tvWind, tvVisibility;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,60 +36,53 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
+        // bind views
+        tvCity = findViewById(R.id.tvCity);
+        tvUpdatedAt = findViewById(R.id.tvUpdatedAt);
+        tvTemp = findViewById(R.id.tvTemp);
+        tvCondition = findViewById(R.id.tvCondition);
+        tvFeelsLike = findViewById(R.id.tvFeelsLike);
+        tvHumidity = findViewById(R.id.tvHumidity);
+        tvWind = findViewById(R.id.tvWind);
+        tvVisibility = findViewById(R.id.tvVisibility);
+
         repo = new WeatherRepository(this);
-        TextView tv = findViewById(R.id.tvStatus);
 
-        // Tạo DB + dữ liệu mẫu trên background thread
+        // Tải & hiển thị dữ liệu
         WeatherDb.get(this).io().execute(() -> {
-            long locId = repo.insertOrGetLocation(
-                    "Ho Chi Minh City", "VN", "Ho Chi Minh", null,
-                    10.776, 106.700, "Asia/Ho_Chi_Minh", true
-            );
-            repo.addFavorite(locId);
+            try {
+                long locId = repo.insertOrGetLocation(
+                        "Ho Chi Minh City", "VN", "Ho Chi Minh", null,
+                        10.776, 106.700, "Asia/Ho_Chi_Minh", true
+                );
+                repo.addFavorite(locId);
 
-            repo.upsertCurrent(
-                    locId,
-                    System.currentTimeMillis() / 1000L,
-                    31.2,
-                    36.0,
-                    70.0,
-                    2.5,
-                    180.0,
-                    10.0,
-                    1005.0,
-                    8.0,
-                    40.0,
-                    0.0,
-                    "03d", "Partly Cloudy", "03d"
-            );
+                // (Nếu đã thêm OpenMeteoClient, gọi API; nếu chưa thì comment dòng dưới)
+                // new OpenMeteoClient().fetchAndStore(10.776, 106.700, "auto", locId, repo);
 
-            WeatherRepository.HourlyEntry h = new WeatherRepository.HourlyEntry();
-            h.ts = (System.currentTimeMillis() / 1000L) + 3600;
-            h.tempC = 30.5;
-            h.code = "03d"; h.text = "Clouds"; h.icon = "03d";
-            repo.upsertHourly(locId, Collections.singletonList(h));
-
-            var cards = repo.getFavoritesCards();
-            runOnUiThread(() -> {
-                if (!cards.isEmpty()) {
+                var cards = repo.getFavoritesCards();
+                runOnUiThread(() -> {
+                    if (cards.isEmpty()) return;
                     var c = cards.get(0);
-                    tv.setText(c.name + " • " + (c.tempC != null ? c.tempC + "°C" : "--"));
-                } else {
-                    tv.setText("No data yet");
-                }
-            });
+                    tvCity.setText(c.name);
+                    if (c.updatedAt > 0) {
+                        tvUpdatedAt.setText("Cập nhật lúc " + fmtTime(c.updatedAt));
+                    }
+                    tvTemp.setText(c.tempC != null ? String.format(Locale.getDefault(),"%.0f°", c.tempC) : "--");
+                    tvCondition.setText(c.condition != null ? c.condition : "");
+                    tvFeelsLike.setText(c.feelsLikeC != null ? String.format(Locale.getDefault(),"Cảm giác như %.0f°", c.feelsLikeC) : "");
+                    tvHumidity.setText(c.humidity != null ? String.format(Locale.getDefault(),"%.0f%%", c.humidity) : "--");
+                    tvWind.setText(c.windKmh != null ? String.format(Locale.getDefault(),"%.0f km/h", c.windKmh) : "--");
+                    tvVisibility.setText(c.visibilityKm != null ? String.format(Locale.getDefault(),"%.1f km", c.visibilityKm) : "--");
+                });
+            } catch (Exception e) {
+                android.util.Log.e("APP", "Init error", e);
+            }
         });
+    }
 
-
-        int cnt = 0;
-        try (android.database.Cursor c =
-                     com.example.weatherforecast.data.WeatherDb.get(this)
-                             .readable().rawQuery("SELECT COUNT(*) FROM locations", null)) {
-            if (c.moveToFirst()) cnt = c.getInt(0);
-        }
-        android.widget.Toast.makeText(this, "DB OK • locations=" + cnt,
-                android.widget.Toast.LENGTH_SHORT).show();
-
-
+    private static String fmtTime(long epochSec) {
+        Date d = new Date(epochSec * 1000L);
+        return new SimpleDateFormat("HH:mm:ss d/M/yyyy", Locale.getDefault()).format(d);
     }
 }
