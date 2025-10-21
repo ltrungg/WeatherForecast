@@ -135,6 +135,24 @@ public class WeatherRepository {
         return out;
     }
 
+    // Lấy thông tin location theo id để gọi API (lat, lon, timezone, name)
+    public LocationInfo getLocation(long locationId) {
+        SQLiteDatabase r = db.readable();
+        try (Cursor c = r.rawQuery(
+                "SELECT name, lat, lon, timezone FROM locations WHERE id = ? LIMIT 1",
+                new String[]{String.valueOf(locationId)})) {
+            if (c.moveToFirst()) {
+                LocationInfo info = new LocationInfo();
+                info.name = c.getString(0);
+                info.lat = c.getDouble(1);
+                info.lon = c.getDouble(2);
+                info.timezone = c.getString(3);
+                return info;
+            }
+        }
+        return null;
+    }
+
     // Model phụ
     public static class FavoriteCard {
         public int sortOrder;
@@ -150,4 +168,152 @@ public class WeatherRepository {
         public Double humidity, windMps, windDeg, clouds, popPct, precipMm, uvi, pressure;
         public String code, text, icon;
     }
+
+    // Lấy thời tiết hiện tại cho một location
+    public CurrentWeatherData getCurrentWeather(long locationId) {
+        SQLiteDatabase r = db.readable();
+        try (Cursor c = r.rawQuery(
+                "SELECT temp_c, feels_like_c, humidity_pct, wind_mps, wind_deg, " +
+                        "visibility_km, pressure_hpa, uvi, clouds_pct, precip_mm, " +
+                        "condition_code, condition_text, icon_code, updated_at " +
+                        "FROM weather_current WHERE location_id = ?",
+                new String[]{String.valueOf(locationId)})) {
+
+            if (c.moveToFirst()) {
+                CurrentWeatherData data = new CurrentWeatherData();
+                data.tempC = c.isNull(0) ? null : c.getDouble(0);
+                data.feelsLikeC = c.isNull(1) ? null : c.getDouble(1);
+                data.humidity = c.isNull(2) ? null : c.getDouble(2);
+                data.windMps = c.isNull(3) ? null : c.getDouble(3);
+                data.windDeg = c.isNull(4) ? null : c.getDouble(4);
+                data.visibilityKm = c.isNull(5) ? null : c.getDouble(5);
+                data.pressure = c.isNull(6) ? null : c.getDouble(6);
+                data.uvi = c.isNull(7) ? null : c.getDouble(7);
+                data.clouds = c.isNull(8) ? null : c.getDouble(8);
+                data.precipMm = c.isNull(9) ? null : c.getDouble(9);
+                data.conditionCode = c.getString(10);
+                data.condition = c.getString(11);
+                data.icon = c.getString(12);
+                data.updatedAt = c.getLong(13);
+
+                // Convert wind from m/s to km/h
+                if (data.windMps != null) {
+                    data.windKmh = data.windMps * 3.6;
+                }
+
+                return data;
+            }
+        }
+        return null;
+    }
+
+    // Lấy dự báo 7 ngày
+    public List<DailyForecastData> getDailyForecast(long locationId) {
+        SQLiteDatabase r = db.readable();
+        List<DailyForecastData> out = new ArrayList<>();
+
+        try (Cursor c = r.rawQuery(
+                "SELECT date_ts, temp_min_c, temp_max_c, sunrise_ts, sunset_ts, " +
+                        "pop_pct, precip_mm, wind_mps, wind_deg, condition_code, " +
+                        "condition_text, icon_code " +
+                        "FROM weather_daily WHERE location_id = ? " +
+                        "ORDER BY date_ts ASC LIMIT 7",
+                new String[]{String.valueOf(locationId)})) {
+
+            while (c.moveToNext()) {
+                DailyForecastData data = new DailyForecastData();
+                data.dateTs = c.getLong(0);
+                data.tempMinC = c.isNull(1) ? null : c.getDouble(1);
+                data.tempMaxC = c.isNull(2) ? null : c.getDouble(2);
+                data.sunriseTs = c.isNull(3) ? null : c.getLong(3);
+                data.sunsetTs = c.isNull(4) ? null : c.getLong(4);
+                data.popPct = c.isNull(5) ? null : c.getDouble(5);
+                data.precipMm = c.isNull(6) ? null : c.getDouble(6);
+                data.windMps = c.isNull(7) ? null : c.getDouble(7);
+                data.windDeg = c.isNull(8) ? null : c.getDouble(8);
+                data.conditionCode = c.getString(9);
+                data.condition = c.getString(10);
+                data.icon = c.getString(11);
+
+                // Convert wind from m/s to km/h
+                if (data.windMps != null) {
+                    data.windKmh = data.windMps * 3.6;
+                }
+
+                out.add(data);
+            }
+        }
+
+        return out;
+    }
+
+    // Upsert daily forecast data
+    public void upsertDaily(long locationId, List<DailyEntry> list) {
+        SQLiteDatabase w = db.writable();
+        w.beginTransaction();
+
+        try {
+            // Xóa dữ liệu cũ để đảm bảo text mới được ghi đè
+            w.delete("weather_daily", "location_id = ?", new String[]{String.valueOf(locationId)});
+
+            for (DailyEntry e : list) {
+                ContentValues cv = new ContentValues();
+                cv.put("location_id", locationId);
+                cv.put("date_ts", e.dateTs);
+                cv.put("temp_min_c", e.tempMinC);
+                cv.put("temp_max_c", e.tempMaxC);
+
+                if (e.sunriseTs != null) cv.put("sunrise_ts", e.sunriseTs);
+                if (e.sunsetTs != null) cv.put("sunset_ts", e.sunsetTs);
+                if (e.popPct != null) cv.put("pop_pct", e.popPct);
+                if (e.precipMm != null) cv.put("precip_mm", e.precipMm);
+                if (e.windMps != null) cv.put("wind_mps", e.windMps);
+                if (e.windDeg != null) cv.put("wind_deg", e.windDeg);
+
+                cv.put("condition_code", e.conditionCode);
+                cv.put("condition_text", e.condition);
+                cv.put("icon_code", e.icon);
+
+                w.insertWithOnConflict("weather_daily", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+            }
+            w.setTransactionSuccessful();
+        } finally {
+            w.endTransaction();
+        }
+    }
+
+// ===========================
+// Model phụ
+// ===========================
+
+
+
+    public static class DailyEntry {
+        public long dateTs;
+        public double tempMinC, tempMaxC;
+        public Long sunriseTs, sunsetTs;
+        public Double popPct, precipMm, windMps, windDeg;
+        public String conditionCode, condition, icon;
+    }
+
+    public static class CurrentWeatherData {
+        public Double tempC, feelsLikeC, humidity, windMps, windDeg, visibilityKm, pressure, uvi, clouds, precipMm, windKmh;
+        public String conditionCode, condition, icon;
+        public long updatedAt;
+    }
+
+    public static class DailyForecastData {
+        public long dateTs;
+        public Double tempMinC, tempMaxC, popPct, precipMm, windMps, windDeg, windKmh;
+        public Long sunriseTs, sunsetTs;
+        public String conditionCode, condition, icon;
+    }
+
+    public static class LocationInfo {
+        public String name;
+        public double lat;
+        public double lon;
+        public String timezone;
+    }
+
 }

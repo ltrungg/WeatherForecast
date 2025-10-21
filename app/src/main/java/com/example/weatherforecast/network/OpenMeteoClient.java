@@ -101,8 +101,24 @@ public class OpenMeteoClient {
 
             // ==== daily ====
             if (b.daily != null && b.daily.time != null) {
-                // bạn có thể map tiếp sang bảng weather_daily (ở đây mình demo current + hourly là đủ cho flow)
-                // TODO: thêm hàm repo.upsertDaily(...) tương tự hourly nếu muốn.
+                List<WeatherRepository.DailyEntry> dailyList = new ArrayList<>();
+                for (int i = 0; i < b.daily.time.size(); i++) {
+                    WeatherRepository.DailyEntry e = new WeatherRepository.DailyEntry();
+                    e.dateTs = parseIsoDate(b.daily.time.get(i), tz);
+                    e.tempMinC = safeD(b.daily.temperature_2m_min, i, null);
+                    e.tempMaxC = safeD(b.daily.temperature_2m_max, i, null);
+                    e.sunriseTs = parseIsoSec(b.daily.sunrise.get(i), tz);
+                    e.sunsetTs = parseIsoSec(b.daily.sunset.get(i), tz);
+                    e.precipMm = safeD(b.daily.precipitation_sum, i, null);
+                    e.windMps = div(safeD(b.daily.windspeed_10m_max, i, null), 3.6);
+                    e.windDeg = safeD(b.daily.winddirection_10m_dominant, i, null);
+                    Integer code = safeI(b.daily.weathercode, i, null);
+                    e.conditionCode = code != null ? String.valueOf(code) : null;
+                    e.condition = code != null ? codeToText(code) : null;
+                    e.icon = null;
+                    dailyList.add(e);
+                }
+                repo.upsertDaily(locationId, dailyList);
             }
         } catch (Exception e) {
             Log.e("API", "fetchAndStore failed", e);
@@ -123,6 +139,20 @@ public class OpenMeteoClient {
         }
     }
 
+    private static Long parseIsoDate(String date, String tz) {
+        if (date == null) return null;
+        try {
+            java.text.SimpleDateFormat sdf =
+                    new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
+            java.util.TimeZone zone = java.util.TimeZone.getTimeZone(tz);
+            sdf.setTimeZone(zone);
+            java.util.Date d = sdf.parse(date);
+            return d != null ? d.getTime() / 1000L : null;
+        } catch (java.text.ParseException e) {
+            return null;
+        }
+    }
+
 
     private static Double safeD(java.util.List<Double> l, int i, Double def) {
         return l != null && i < l.size() && l.get(i) != null ? l.get(i) : def;
@@ -133,17 +163,36 @@ public class OpenMeteoClient {
     private static Double div(Double v, double d) { return v == null ? null : v / d; }
 
     private static String codeToText(int code) {
-        // mapping đơn giản; bạn có thể mở rộng theo bảng WMO
+        // Mapping WMO sang tiếng Việt
         switch (code) {
-            case 0: return "Clear";
-            case 1: case 2: case 3: return "Partly cloudy";
-            case 45: case 48: return "Fog";
-            case 51: case 53: case 55: return "Drizzle";
-            case 61: case 63: case 65: return "Rain";
-            case 71: case 73: case 75: return "Snow";
-            case 80: case 81: case 82: return "Rain showers";
-            case 95: return "Thunderstorm";
-            default: return "Unknown";
+            case 0: return "Trời quang mây";                    // Clear sky
+            case 1: return "Ít mây";                            // Mainly clear
+            case 2: return "Nhiều mây";                         // Partly cloudy
+            case 3: return "U ám";                              // Overcast
+            case 45: case 48: return "Sương mù";                // Fog
+            case 51: return "Mưa phùn nhẹ";                     // Light drizzle
+            case 53: return "Mưa phùn";                          // Drizzle
+            case 55: return "Mưa phùn dày";                     // Heavy drizzle
+            case 56: return "Mưa phùn đóng băng";               // Freezing drizzle (light)
+            case 57: return "Mưa phùn đóng băng dày";           // Freezing drizzle (heavy)
+            case 61: return "Mưa nhẹ";                          // Light rain
+            case 63: return "Mưa vừa";                          // Rain
+            case 65: return "Mưa to";                           // Heavy rain
+            case 66: return "Mưa lạnh";                         // Freezing rain (light)
+            case 67: return "Mưa lạnh nặng hạt";                // Freezing rain (heavy)
+            case 71: return "Tuyết nhẹ";                        // Light snow
+            case 73: return "Tuyết rơi";                        // Snow
+            case 75: return "Tuyết dày";                        // Heavy snow
+            case 77: return "Hạt tuyết";                        // Snow grains
+            case 80: return "Mưa rào nhẹ";                      // Rain showers: slight
+            case 81: return "Mưa rào";                          // Rain showers: moderate
+            case 82: return "Mưa rào rất to";                   // Rain showers: violent
+            case 85: return "Mưa tuyết rào";                    // Snow showers: slight
+            case 86: return "Mưa tuyết rào dày";                // Snow showers: heavy
+            case 95: return "Dông";                             // Thunderstorm
+            case 96: return "Dông kèm mưa đá";                  // Thunderstorm with hail (slight)
+            case 99: return "Dông mạnh kèm mưa đá";             // Severe thunderstorm with hail
+            default: return "Không xác định";
         }
     }
 }
