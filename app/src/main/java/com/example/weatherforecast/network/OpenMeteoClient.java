@@ -3,7 +3,8 @@ package com.example.weatherforecast.network;
 import android.util.Log;
 
 import com.example.weatherforecast.data.WeatherRepository;
-
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import java.time.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,10 +12,40 @@ import java.util.List;
 import okhttp3.OkHttpClient;
 import okhttp3.logging.HttpLoggingInterceptor;
 import retrofit2.*;
+import retrofit2.converter.gson.GsonConverterFactory;
 
 public class OpenMeteoClient {
     private final OpenMeteoApi api;
+    public static final String API_KEY = "2d8a6e9dc75a4023b2a103306252110";
+    private static OpenMeteoApi apiService = null;
 
+    public static OpenMeteoApi getApiService() {
+        if (apiService == null) {
+            // Tạo một interceptor để log các request và response ra Logcat. Rất hữu ích để gỡ lỗi.
+            HttpLoggingInterceptor logging = new HttpLoggingInterceptor();
+            logging.setLevel(HttpLoggingInterceptor.Level.BODY);
+
+            OkHttpClient client = new OkHttpClient.Builder()
+                    .addInterceptor(logging)
+                    .build();
+
+            // Dùng GsonBuilder để linh hoạt hơn khi phân tích JSON
+            Gson gson = new GsonBuilder()
+                    .setLenient()
+                    .create();
+
+            // Xây dựng Retrofit
+            Retrofit retrofit = new Retrofit.Builder()
+                    .baseUrl("https://api.open-meteo.com/") // URL cơ sở cho Retrofit
+                    .addConverterFactory(GsonConverterFactory.create(gson)) // Dùng Gson để chuyển đổi JSON
+                    .client(client) // Sử dụng OkHttpClient đã cấu hình
+                    .build();
+
+            // Tạo ra thực thể của service API
+            apiService = retrofit.create(OpenMeteoApi.class);
+        }
+        return apiService;
+    }
     public OpenMeteoClient() {
         HttpLoggingInterceptor log = new HttpLoggingInterceptor();
         log.setLevel(HttpLoggingInterceptor.Level.BASIC);

@@ -38,7 +38,12 @@
         <activity
             android:name=".network.DailyActivity"
             android:exported="false" />
-
+        <activity
+            android:name=".FavoritesActivity"
+            android:exported="false"/>
+        <activity
+            android:name=".SearchActivity"
+            android:exported="false"/>
         <activity
             android:name=".SettingsActivity"
             android:exported="false"

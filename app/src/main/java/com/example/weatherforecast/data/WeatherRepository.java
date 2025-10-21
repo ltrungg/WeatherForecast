@@ -47,13 +47,36 @@ public class WeatherRepository {
         }
     }
 
-    public void addFavorite(long locationId) {
+//    public void addFavorite(long locationId) {
+//        SQLiteDatabase w = db.writable();
+//        w.execSQL(
+//                "INSERT OR IGNORE INTO favorites(location_id, sort_order) " +
+//                        "VALUES (?, IFNULL((SELECT MAX(sort_order)+1 FROM favorites), 0))",
+//                new Object[]{locationId}
+//        );
+//    }
+    public void addFavorite(long locationId, String name, String country) {
+    SQLiteDatabase w = db.writable();
+    ContentValues cv = new ContentValues();
+    cv.put("location_id", locationId);
+
+    // Tìm giá trị sort_order lớn nhất hiện tại và cộng thêm 1
+    // IFNULL được dùng để xử lý trường hợp bảng favorites chưa có dòng nào (kết quả là NULL)
+    try (Cursor c = w.rawQuery("SELECT MAX(sort_order) FROM favorites", null)) {
+        int maxSortOrder = -1;
+        if (c.moveToFirst()) {
+            maxSortOrder = c.getInt(0);
+        }
+        cv.put("sort_order", maxSortOrder + 1);
+    }
+
+    // Thêm vào bảng favorites, nếu location_id đã tồn tại thì bỏ qua (IGNORE)
+    w.insertWithOnConflict("favorites", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+    }
+
+    public void removeFavorite(long locationId) {
         SQLiteDatabase w = db.writable();
-        w.execSQL(
-                "INSERT OR IGNORE INTO favorites(location_id, sort_order) " +
-                        "VALUES (?, IFNULL((SELECT MAX(sort_order)+1 FROM favorites), 0))",
-                new Object[]{locationId}
-        );
+        w.delete("favorites", "location_id = ?", new String[]{String.valueOf(locationId)});
     }
 
     public void upsertCurrent(long locationId, long obsTime, double tempC, Double feelsLikeC,

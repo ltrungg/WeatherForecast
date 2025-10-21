@@ -26,7 +26,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.weatherforecast.data.AlertsRepository;
-
+import com.google.android.material.materialswitch.MaterialSwitch;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -138,8 +138,15 @@ public class AlertsActivity extends AppCompatActivity {
                 if (Build.VERSION.SDK_INT >= 33) {
                     notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
                 } else {
-                    startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+                    Intent intent = new Intent();
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                        intent.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+                    } else {
+                        intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                        intent.setData(android.net.Uri.fromParts("package", getPackageName(), null));
+                    }
+                    startActivity(intent);
                 }
             });
         }
@@ -216,7 +223,9 @@ public class AlertsActivity extends AppCompatActivity {
         @Override public int getItemCount() { return data.size(); }
     }
     private class AlertsVH extends RecyclerView.ViewHolder {
-        TextView tvTitle, tvSub; Switch swActive; ImageButton btnDel;
+        TextView tvTitle, tvSub;
+        MaterialSwitch swActive;
+        ImageButton btnDel;
         AlertsVH(View v) {
             super(v);
             tvTitle = v.findViewById(R.id.tvTitle);
@@ -230,7 +239,18 @@ public class AlertsActivity extends AppCompatActivity {
             tvSub.setText(a.metric + " " + a.op + " " + a.threshold + (a.unit == null ? "" : a.unit));
             swActive.setChecked(a.active);
             swActive.setOnCheckedChangeListener((b, is) -> repo.setActive(a.id, is));
-            btnDel.setOnClickListener(v -> { repo.delete(a.id); loadRules(); });
+            btnDel.setOnClickListener(v -> {
+                int currentPosition = getAdapterPosition();
+                if (currentPosition != RecyclerView.NO_POSITION) {
+                    repo.delete(a.id);
+                    // Sửa ở đây: Thay thế loadRules()
+                    adapter.data.remove(currentPosition);
+                    adapter.notifyItemRemoved(currentPosition);
+                    adapter.notifyItemRangeChanged(currentPosition, adapter.data.size());
+                    // Cập nhật lại emptyPanel
+                    emptyPanel.setVisibility(adapter.data.isEmpty() ? View.VISIBLE : View.GONE);
+                }
+            });
         }
     }
 }

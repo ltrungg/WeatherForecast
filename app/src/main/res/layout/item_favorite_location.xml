@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="16dp"
+    android:layout_marginTop="8dp"
+    android:layout_marginEnd="16dp"
+    android:layout_marginBottom="8dp"
+    android:background="@drawable/bg_favorite_item"
+    android:padding="16dp">
+
+    <ImageView
+        android:id="@+id/iv_location_pin"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_location_pin"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/tv_city_name"
+        app:tint="@color/sub_text_color" />
+
+    <TextView
+        android:id="@+id/tv_city_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:textColor="@color/main_text_color"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toEndOf="@id/iv_location_pin"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="Hà Nội" />
+
+    <TextView
+        android:id="@+id/tv_country_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textColor="@color/sub_text_color"
+        android:textSize="14sp"
+        app:layout_constraintStart_toStartOf="@+id/tv_city_name"
+        app:layout_constraintTop_toBottomOf="@+id/tv_city_name"
+        tools:text="Việt Nam" />
+
+    <TextView
+        android:id="@+id/tv_temperature"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/main_text_color"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toStartOf="@+id/iv_delete"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginEnd="16dp"
+        tools:text="28°" />
+
+    <TextView
+        android:id="@+id/tv_weather_description"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/sub_text_color"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="@+id/tv_temperature"
+        app:layout_constraintTop_toBottomOf="@+id/tv_temperature"
+        tools:text="Nhiều mây" />
+
+    <ImageView
+        android:id="@+id/iv_weather_icon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        app:layout_constraintBottom_toBottomOf="@+id/tv_temperature"
+        app:layout_constraintEnd_toStartOf="@+id/tv_temperature"
+        app:layout_constraintTop_toTopOf="@+id/tv_temperature"
+        android:layout_marginEnd="8dp"
+        app:tint="@color/button_color"
+        tools:src="@drawable/ic_cloud_24" />
+
+    <ImageView
+        android:id="@+id/iv_delete"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_delete"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:tint="@color/sub_text_color" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
