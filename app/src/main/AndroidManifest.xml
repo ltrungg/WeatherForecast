@@ -34,6 +34,11 @@
             </intent-filter>
         </activity>
 
+        <!-- DailyActivity -->
+        <activity
+            android:name=".network.DailyActivity"
+            android:exported="false" />
+
         <activity
             android:name=".SettingsActivity"
             android:exported="false"

@@ -33,6 +33,8 @@ public class MainActivity extends AppCompatActivity {
 
     // view refs
     private TextView tvCity, tvUpdatedAt, tvTemp, tvCondition, tvFeelsLike, tvHumidity, tvWind, tvVisibility;
+    private BottomNavigationView bottomNav;
+    private long currentLocationId = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,17 +60,24 @@ public class MainActivity extends AppCompatActivity {
         // prefs
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
 
-        // ==== Bottom navigation: mở màn Cài đặt ====
-        BottomNavigationView bottom = findViewById(R.id.bottomNav);
-        if (bottom != null) {
-            bottom.setSelectedItemId(R.id.nav_now);
-            bottom.setOnItemSelectedListener(item -> {
-                if (item.getItemId() == R.id.nav_settings) {
+        // ==== Bottom navigation ====
+        bottomNav = findViewById(R.id.bottomNav);
+        if (bottomNav != null) {
+            bottomNav.setSelectedItemId(R.id.nav_now);
+            bottomNav.setOnItemSelectedListener(item -> {
+                int itemId = item.getItemId();
+                if (itemId == R.id.nav_now) {
+                    return true; // đang ở màn "Hiện tại"
+                } else if (itemId == R.id.nav_daily) {
+                    Intent intent = new Intent(this, com.example.weatherforecast.network.DailyActivity.class);
+                    intent.putExtra("location_id", currentLocationId > 0 ? currentLocationId : 1);
+                    startActivity(intent);
+                    return true;
+                } else if (itemId == R.id.nav_settings) {
                     startActivity(new Intent(this, SettingsActivity.class));
                     return true;
                 }
-                // các tab khác tạm thời no-op
-                return true;
+                return false;
             });
         }
 
@@ -82,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
                         10.776, 106.700, "Asia/Ho_Chi_Minh", true
                 );
                 repo.addFavorite(locId);
+                currentLocationId = locId;
 
                 // (Nếu đã thêm OpenMeteoClient, gọi API; nếu chưa thì comment dòng dưới)
                 // new OpenMeteoClient().fetchAndStore(10.776, 106.700, "auto", locId, repo);
