@@ -34,7 +34,7 @@ public class OpenMeteoClient {
                 + "precipitation,weathercode,windspeed_10m,winddirection_10m,"
                 + "pressure_msl,visibility,cloudcover";
         String daily = "temperature_2m_max,temperature_2m_min,sunrise,sunset,"
-                + "uv_index_max,precipitation_sum,weathercode,windspeed_10m_max,"
+                + "uv_index_max,precipitation_sum,precipitation_probability_max,weathercode,windspeed_10m_max,"
                 + "winddirection_10m_dominant";
 
         Call<WeatherResponse> call = api.forecast(
@@ -110,6 +110,7 @@ public class OpenMeteoClient {
                     e.sunriseTs = parseIsoSec(b.daily.sunrise.get(i), tz);
                     e.sunsetTs = parseIsoSec(b.daily.sunset.get(i), tz);
                     e.precipMm = safeD(b.daily.precipitation_sum, i, null);
+                    e.popPct = safeD(b.daily.precipitation_probability_max, i, null);
                     e.windMps = div(safeD(b.daily.windspeed_10m_max, i, null), 3.6);
                     e.windDeg = safeD(b.daily.winddirection_10m_dominant, i, null);
                     Integer code = safeI(b.daily.weathercode, i, null);
