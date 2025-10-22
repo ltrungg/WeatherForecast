@@ -1,205 +1,329 @@
 package com.example.weatherforecast;
-import android.app.Activity;
+
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.view.MenuItem;
+import android.widget.ImageView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.EdgeToEdge;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-
-
-import com.example.weatherforecast.data.WeatherDb;
-import com.example.weatherforecast.data.WeatherRepository;
-// import com.example.weatherforecast.network.OpenMeteoClient;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.card.MaterialCardView;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
-import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
-    // ==== Preferences keys (đồng bộ với SettingsActivity) ====
-    private static final String PREFS = "settings";
-    private static final String KEY_TEMP_UNIT = "temp_unit"; // "C" | "F"
-    private static final String KEY_WIND_UNIT = "wind_unit"; // "kmh" | "mph"
+    // UI: Section 1
+    private TextView tvCity, tvDate, tvTemperature, tvDescription, tvMinMax;
+    private ImageView imgWeatherIcon;
 
-    private SharedPreferences prefs;
-    private WeatherRepository repo;
+    // UI: Section 2
+    private TextView tvWindLabel, tvWindValue;
+    private TextView tvHumidityLabel, tvHumidityValue;
+    private TextView tvVisibilityLabel, tvVisibilityValue;
+    private TextView tvPressureLabel, tvPressureValue;
 
-    // view refs
-    private TextView tvCity, tvUpdatedAt, tvTemp, tvCondition, tvFeelsLike, tvHumidity, tvWind, tvVisibility;
-    private BottomNavigationView bottomNav;
-    private long currentLocationId = -1;
+    // UI: Sun cards
+    private TextView tvSunriseLabel, tvSunriseTime, tvSunsetLabel, tvSunsetTime;
 
-    // KHAI BÁO LAUNCHER MỚI, THAY THẾ CHO onActivityResult
-    ActivityResultLauncher<Intent> favoritesActivityLauncher = registerForActivityResult(
-            new ActivityResultContracts.StartActivityForResult(),
-            result -> {
-                if (result.getResultCode() == Activity.RESULT_OK) {
-                    Intent data = result.getData();
-                    if (data != null && data.hasExtra("SELECTED_LOCATION_ID")) {
-                        long selectedLocationId = data.getLongExtra("SELECTED_LOCATION_ID", -1);
-                        if (selectedLocationId != -1) {
-                            currentLocationId = selectedLocationId;
-                            loadAndDisplayWeather(currentLocationId);
-                        }
-                    }
-                }
-            });
+    // Containers
+    private ScrollView scrollMain;
+    private BottomNavigationView bottomNavigationView;
+
+    // Permissions
+    private ActivityResultLauncher<String[]> locationPermissionLauncher;
+    private ActivityResultLauncher<String> notificationPermissionLauncher;
+
+    // Threading
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final Handler main = new Handler(Looper.getMainLooper());
+
+    // Simple cache
+    @Nullable private WeatherData cached;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-            return insets;
-        });
 
-        // bind views
+        bindViews();
+        initPermissionsLaunchers();
+        initBottomNav();
+        initStaticHeader();
+
+        // Quyền: xin nếu cần rồi load dữ liệu
+        requestNeededPermissionsThenLoad();
+
+        // Khôi phục UI nếu đã có
+        if (savedInstanceState != null) {
+            WeatherData restore = (WeatherData) savedInstanceState.getSerializable("cache");
+            if (restore != null) {
+                cached = restore;
+                render(restore);
+            }
+        }
+    }
+
+    private void bindViews() {
+        scrollMain = findViewById(R.id.scrollMain);
+
+        // Section 1
         tvCity = findViewById(R.id.tvCity);
-        tvUpdatedAt = findViewById(R.id.tvUpdatedAt);
-        tvTemp = findViewById(R.id.tvTemp);
-        tvCondition = findViewById(R.id.tvCondition);
-        tvFeelsLike = findViewById(R.id.tvFeelsLike);
-        tvHumidity = findViewById(R.id.tvHumidity);
-        tvWind = findViewById(R.id.tvWind);
-        tvVisibility = findViewById(R.id.tvVisibility);
+        tvDate = findViewById(R.id.tvDate);
+        tvTemperature = findViewById(R.id.tvTemperature);
+        tvDescription = findViewById(R.id.tvDescription);
+        tvMinMax = findViewById(R.id.tvMinMax);
+        imgWeatherIcon = findViewById(R.id.imgWeatherIcon);
 
-        // prefs
-        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        // Section 2
+        tvWindLabel = findViewById(R.id.tvWindLabel);
+        tvWindValue = findViewById(R.id.tvWindValue);
 
-        // ==== Bottom navigation ====
-        bottomNav = findViewById(R.id.bottomNav);
-        if (bottomNav != null) {
-            bottomNav.setSelectedItemId(R.id.nav_now);
-            bottomNav.setOnItemSelectedListener(item -> {
-                int itemId = item.getItemId();
-                if (itemId == R.id.nav_now) {
-                    return true; // đang ở màn "Hiện tại"
-                } else if (itemId == R.id.nav_daily) {
-                    Intent intent = new Intent(this, com.example.weatherforecast.network.DailyActivity.class);
-                    intent.putExtra("location_id", currentLocationId > 0 ? currentLocationId : 1);
-                    startActivity(intent);
+        tvHumidityLabel = findViewById(R.id.tvHumidityLabel);
+        tvHumidityValue = findViewById(R.id.tvHumidityValue);
+
+        tvVisibilityLabel = findViewById(R.id.tvVisibilityLabel);
+        tvVisibilityValue = findViewById(R.id.tvVisibilityValue);
+
+        tvPressureLabel = findViewById(R.id.tvPressureLabel);
+        tvPressureValue = findViewById(R.id.tvPressureValue);
+
+        // Sun
+        tvSunriseLabel = findViewById(R.id.tvSunriseLabel);
+        tvSunriseTime = findViewById(R.id.tvSunriseTime);
+        tvSunsetLabel = findViewById(R.id.tvSunsetLabel);
+        tvSunsetTime = findViewById(R.id.tvSunsetTime);
+
+        bottomNavigationView = findViewById(R.id.bottomNavigation);
+    }
+
+    private void initStaticHeader() {
+        // City giữ nguyên text hiện tại (“Hà Nội”) nếu bạn chưa có location
+        String today = new SimpleDateFormat("EEE, d 'tháng' MM yyyy", new Locale("vi"))
+                .format(new Date());
+        tvDate.setText(today);
+    }
+
+    private void initBottomNav() {
+        // Đặt tab mặc định
+        bottomNavigationView.setSelectedItemId(R.id.nav_now);
+
+        bottomNavigationView.setOnItemSelectedListener(new BottomNavigationView.OnItemSelectedListener() {
+            @Override public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+                int id = item.getItemId();
+                if (id == R.id.nav_now) {
+                    // Cuộn lên đầu
+                    scrollMain.smoothScrollTo(0, 0);
                     return true;
-                } else if (itemId == R.id.nav_fav) {
-                    Intent intent = new Intent(this, FavoritesActivity.class);
-                    favoritesActivityLauncher.launch(intent);
+                } else if (id == R.id.nav_hourly) {
+                    // Theo giờ (mở Activity khác nếu đã có)
+                    startActivity(new Intent(MainActivity.this, com.example.weatherforecast.network.DailyActivity.class));
                     return true;
-                } else if (itemId == R.id.nav_settings) {
-                    startActivity(new Intent(this, SettingsActivity.class));
+                } else if (id == R.id.nav_daily) {
+                    // 7 ngày
+                    startActivity(new Intent(MainActivity.this, com.example.weatherforecast.network.DailyActivity.class));
+                    return true;
+                } else if (id == R.id.nav_fav) {
+                    startActivity(new Intent(MainActivity.this, FavoritesActivity.class));
+                    return true;
+                } else if (id == R.id.nav_settings) {
+                    startActivity(new Intent(MainActivity.this, SettingsActivity.class));
                     return true;
                 }
                 return false;
-            });
-        }
-
-        repo = new WeatherRepository(this);
-
-        WeatherDb.get(this).io().execute(() -> {
-            List<WeatherRepository.FavoriteCard> favorites = repo.getFavoritesCards();
-            if (!favorites.isEmpty()) {
-                currentLocationId = favorites.get(0).locationId;
-                loadAndDisplayWeather(currentLocationId);
-            } else {
-                String defaultCityName = "Hà Nội";
-                String defaultCountry = "VN";
-
-                long locId = repo.insertOrGetLocation(
-                        defaultCityName, defaultCountry, "", null,
-                        21.0285, 105.8542, "Asia/Ho_Chi_Minh", true
-                );
-                repo.addFavorite(locId, defaultCityName, defaultCountry);
-                currentLocationId = locId;
-                loadAndDisplayWeather(currentLocationId);
             }
         });
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // Khi quay lại từ Settings, cập nhật lại hiển thị theo đơn vị mới
-        if (currentLocationId != -1) {
-            loadAndDisplayWeather(currentLocationId);
-        }
-        if (bottomNav != null) {
-            bottomNav.setSelectedItemId(R.id.nav_now);
+    private void initPermissionsLaunchers() {
+        locationPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestMultiplePermissions(),
+                result -> {
+                    // Nếu được cấp, load; nếu từ chối, vẫn load data mặc định
+                    loadWeatherWithBestEffort();
+                });
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            notificationPermissionLauncher = registerForActivityResult(
+                    new ActivityResultContracts.RequestPermission(),
+                    granted -> {
+                        // Không bắt buộc cho màn hình này
+                    });
         }
     }
 
-    // ==== Helpers: format theo Settings ====
-    private String formatTemp(Double tempC) {
-        if (tempC == null) return "--";
-        String unit = prefs.getString(KEY_TEMP_UNIT, "C");
-        if ("F".equals(unit)) {
-            double f = cToF(tempC);
-            return String.format(Locale.getDefault(), "%.0f°", f);
-        }
-        return String.format(Locale.getDefault(), "%.0f°", tempC);
-    }
+    private void requestNeededPermissionsThenLoad() {
+        boolean fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+        boolean coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
 
-    private String formatWind(Double windKmh) {
-        if (windKmh == null) return "--";
-        String unit = prefs.getString(KEY_WIND_UNIT, "kmh");
-        if ("mph".equals(unit)) {
-            double mph = kmhToMph(windKmh);
-            return String.format(Locale.getDefault(), "%.0f mph", mph);
-        }
-        return String.format(Locale.getDefault(), "%.0f km/h", windKmh);
-    }
-
-    private static double cToF(double c) { return c * 9 / 5.0 + 32; }
-    private static double kmhToMph(double kmh) { return kmh * 0.621371; }
-
-    private static String fmtTime(long epochSec) {
-        Date d = new Date(epochSec * 1000L);
-        return new SimpleDateFormat("HH:mm:ss d/M/yyyy", Locale.getDefault()).format(d);
-    }
-
-    private void loadAndDisplayWeather(long locationId) {
-        WeatherDb.get(this).io().execute(() -> {
-            // Lấy thông tin chi tiết của địa điểm (tên,...) và thời tiết hiện tại
-            WeatherRepository.LocationInfo locationInfo = repo.getLocation(locationId);
-            WeatherRepository.CurrentWeatherData weatherData = repo.getCurrentWeather(locationId);
-
-            runOnUiThread(() -> {
-                if (locationInfo == null || weatherData == null) {
-                    Toast.makeText(this, "Không tìm thấy dữ liệu thời tiết.", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-
-                // Cập nhật giao diện với dữ liệu mới
-                tvCity.setText(locationInfo.name);
-                if (weatherData.updatedAt > 0) {
-                    tvUpdatedAt.setText("Cập nhật lúc " + fmtTime(weatherData.updatedAt));
-                } else {
-                    tvUpdatedAt.setText("Chưa có dữ liệu");
-                }
-
-                tvTemp.setText(formatTemp(weatherData.tempC));
-                tvCondition.setText(weatherData.condition != null ? weatherData.condition : "");
-                tvFeelsLike.setText(weatherData.feelsLikeC != null
-                        ? String.format(Locale.getDefault(), "Cảm giác như %s", formatTemp(weatherData.feelsLikeC))
-                        : "");
-                tvHumidity.setText(weatherData.humidity != null
-                        ? String.format(Locale.getDefault(), "%.0f%%", weatherData.humidity) : "--");
-                tvWind.setText(formatWind(weatherData.windKmh));
-                tvVisibility.setText(weatherData.visibilityKm != null
-                        ? String.format(Locale.getDefault(), "%.1f km", weatherData.visibilityKm) : "--");
+        if (!fine && !coarse) {
+            locationPermissionLauncher.launch(new String[]{
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
             });
+        } else {
+            loadWeatherWithBestEffort();
+        }
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+    }
+
+    private void loadWeatherWithBestEffort() {
+        // 1) Thử lấy last known location nhanh
+        Location loc = getLastKnownLocationSafe();
+        // 2) Chạy IO giả lập gọi API, sau đó render
+        io.execute(() -> {
+            // Giả lập latency 600ms
+            try { Thread.sleep(600); } catch (InterruptedException ignored) { }
+
+            // TODO: thay bằng gọi API thực tế (Retrofit/HttpUrlConnection)
+            WeatherData data = mockFetch(loc);
+
+            cached = data;
+            main.post(() -> render(data));
         });
+    }
+
+    @SuppressLint("MissingPermission")
+    @Nullable
+    private Location getLastKnownLocationSafe() {
+        try {
+            LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+            if (lm == null) return null;
+
+            Location best = null;
+            for (String provider : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(provider);
+                if (l == null) continue;
+                if (best == null || l.getAccuracy() < best.getAccuracy()) {
+                    best = l;
+                }
+            }
+            return best;
+        } catch (SecurityException se) {
+            return null;
+        }
+    }
+
+    // Render UI từ model
+    private void render(@NonNull WeatherData d) {
+        tvCity.setText(d.city);
+        tvTemperature.setText(d.temperature);
+        tvDescription.setText(d.description);
+        tvMinMax.setText(String.format(Locale.getDefault(), "Cao: %s · Thấp: %s", d.maxTemp, d.minTemp));
+
+        tvWindValue.setText(d.wind);
+        tvHumidityValue.setText(d.humidity);
+        tvVisibilityValue.setText(d.visibility);
+        tvPressureValue.setText(d.pressure);
+
+        tvSunriseTime.setText(d.sunrise);
+        tvSunsetTime.setText(d.sunset);
+
+        // Icon mây đơn giản (có thể map theo code thời tiết)
+        imgWeatherIcon.setImageResource(R.drawable.ic_cloud_24);
+    }
+
+    // Giả lập dữ liệu API
+    private WeatherData mockFetch(@Nullable Location loc) {
+        String cityName = "Hà Nội";
+        if (loc != null) {
+            // Thực tế: reverse geocoding để đổi lat/lon -> city
+            // Ở đây chỉ minh họa
+            cityName = cityName; // giữ nguyên
+        }
+        WeatherData w = new WeatherData();
+        w.city = cityName;
+        w.temperature = "28°";
+        w.description = "Nhiều mây";
+        w.maxTemp = "32°";
+        w.minTemp = "24°";
+        w.wind = "12 km/h";
+        w.humidity = "75%";
+        w.visibility = "10 km";
+        w.pressure = "1013 mb";
+        w.sunrise = "05:45";
+        w.sunset = "17:32";
+        return w;
+    }
+
+    // Save/restore cache qua xoay màn hình
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (cached != null) {
+            outState.putSerializable("cache", cached);
+        }
+    }
+
+    // Optional: hướng dẫn bật location nếu tắt
+    private void ensureLocationEnabledHint() {
+        LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        if (lm == null) return;
+        boolean enabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        if (!enabled) {
+            Toast.makeText(this, "Bật dịch vụ vị trí để định vị chính xác", Toast.LENGTH_SHORT).show();
+            startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Có thể refetch nhẹ khi người dùng quay lại
+        if (cached == null) loadWeatherWithBestEffort();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        io.shutdownNow();
+    }
+
+    // ===== Model đơn giản =====
+    public static class WeatherData implements java.io.Serializable {
+        public String city;
+        public String temperature;
+        public String description;
+        public String maxTemp;
+        public String minTemp;
+
+        public String wind;
+        public String humidity;
+        public String visibility;
+        public String pressure;
+
+        public String sunrise;
+        public String sunset;
     }
 }
