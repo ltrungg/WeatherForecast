@@ -6,8 +6,8 @@
     android:layout_marginBottom="8dp"
     app:cardCornerRadius="12dp"
     app:cardElevation="0dp"
-    app:cardBackgroundColor="@android:color/transparent"
-    app:strokeColor="#33FFFFFF"
+    app:cardBackgroundColor="#FFFFFF"
+    app:strokeColor="#E0E0E0"
     app:strokeWidth="1dp">
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -23,7 +23,7 @@
             android:text="Hôm nay"
             android:textStyle="bold"
             android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
+            android:textColor="#000000"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"/>
@@ -34,7 +34,7 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:src="@drawable/ic_cloud_24"
-            app:tint="#FFFFFF"
+            app:tint="#000000"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toEndOf="@id/tvDate"
@@ -47,7 +47,7 @@
             android:layout_height="wrap_content"
             android:text="Nhiều mây"
             android:textSize="14sp"
-            android:textColor="#E0E0E0"
+            android:textColor="#000000"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toEndOf="@id/ivWeatherIcon"
             android:layout_marginStart="12dp"/>
@@ -59,7 +59,7 @@
             android:layout_height="wrap_content"
             android:text="20% mưa"
             android:textSize="12sp"
-            android:textColor="#CCCCCC"
+            android:textColor="#666666"
             app:layout_constraintTop_toBottomOf="@id/tvDesc"
             app:layout_constraintStart_toStartOf="@id/tvDesc"
             android:layout_marginTop="2dp"/>
@@ -72,7 +72,7 @@
             android:text="32°"
             android:textStyle="bold"
             android:textSize="18sp"
-            android:textColor="#FFFFFFFF"
+            android:textColor="#000000"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintEnd_toEndOf="parent"/>
 
@@ -83,7 +83,7 @@
             android:layout_height="wrap_content"
             android:text="24°"
             android:textSize="14sp"
-            android:textColor="#E0E0E0"
+            android:textColor="#000000"
             app:layout_constraintTop_toBottomOf="@id/tvTempHigh"
             app:layout_constraintEnd_toEndOf="parent"
             android:layout_marginTop="2dp"/>
