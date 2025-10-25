@@ -1,23 +1,44 @@
 package com.example.weatherforecast.network;
 
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.view.animation.LayoutAnimationController;
 import android.widget.TextView;
+import android.widget.ScrollView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.example.weatherforecast.R;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.button.MaterialButton;
+import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.charts.BarChart;
 
 import com.example.weatherforecast.data.WeatherRepository;
+import java.util.List;
 
 public class DailyActivity extends AppCompatActivity {
 
     private WeatherRepository repo;
     private DailyAdapter adapter;
     private BottomNavigationView bottomNav;
+
+    // UI components for toggle functionality
+    private MaterialButton btnList;
+    private MaterialButton btnChart;
+    private RecyclerView recyclerDaily;
+    private ScrollView chartContainer;
+    private LineChart temperatureChart;
+    private BarChart precipitationChart;
+    private TextView tvTitle;
+
+    // State management
+    private boolean isChartView = false;
+    private List<WeatherRepository.DailyForecastData> currentData;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,10 +47,23 @@ public class DailyActivity extends AppCompatActivity {
         setContentView(R.layout.daily_weather);
 
         final androidx.constraintlayout.widget.ConstraintLayout root = findViewById(R.id.rootDaily);
-        RecyclerView rv = findViewById(R.id.recyclerDaily);
-        rv.setLayoutManager(new LinearLayoutManager(this));
+
+        // Initialize UI components
+        recyclerDaily = findViewById(R.id.recyclerDaily);
+        recyclerDaily.setLayoutManager(new LinearLayoutManager(this));
         adapter = new DailyAdapter();
-        rv.setAdapter(adapter);
+        recyclerDaily.setAdapter(adapter);
+
+        // Initialize chart components
+        chartContainer = findViewById(R.id.chartContainer);
+        temperatureChart = findViewById(R.id.temperatureChart);
+        precipitationChart = findViewById(R.id.precipitationChart);
+        btnList = findViewById(R.id.btnList);
+        btnChart = findViewById(R.id.btnChart);
+        tvTitle = findViewById(R.id.tvTitle);
+
+        // Setup toggle buttons
+        setupToggleButtons();
 
         bottomNav = findViewById(R.id.bottomNav);
         setupBottomNavigation();
@@ -68,38 +102,15 @@ public class DailyActivity extends AppCompatActivity {
                 Log.d("DailyActivity", "OpenMeteo fetch completed");
 
                 // Đọc lại DB và hiển thị
-                var list = repo.getDailyForecast(locationId);
-
-                // Áp theme theo thời gian/ngày đêm và điều kiện mưa
-                boolean isRaining = false;
-                if (list != null && !list.isEmpty()) {
-                    for (var d : list) {
-                        if (d.precipMm != null && d.precipMm > 0) { isRaining = true; break; }
-                    }
-                }
-
-                // Xác định ngày/đêm theo giờ hiện tại so với sunrise/sunset của ngày đầu tiên
-                boolean isNight = false;
-                if (list != null && !list.isEmpty()) {
-                    var today = list.get(0);
-                    long now = System.currentTimeMillis() / 1000L;
-                    if (today.sunriseTs != null && today.sunsetTs != null) {
-                        isNight = !(now >= today.sunriseTs && now < today.sunsetTs);
-                    }
-                }
+                List<WeatherRepository.DailyForecastData> list = repo.getDailyForecast(locationId);
 
                 Log.d("DailyActivity", "Forecast loaded from DB, size=" + (list != null ? list.size() : 0));
-                boolean finalIsRaining = isRaining;
-                boolean finalIsNight = isNight;
                 runOnUiThread(() -> {
+                    // Store data for charts
+                    currentData = list;
                     adapter.setData(list);
-                    if (finalIsRaining) {
-                        root.setBackgroundResource(R.drawable.bg_daily_rain);
-                    } else if (finalIsNight) {
-                        root.setBackgroundResource(R.drawable.bg_daily_night);
-                    } else {
-                        root.setBackgroundResource(R.drawable.bg_daily_day);
-                    }
+                    // Sử dụng nền bg_sky cố định cho tất cả trường hợp
+                    root.setBackgroundResource(R.drawable.bg_sky);
                 });
             } catch (Exception e) {
                 Log.e("DailyActivity", "Error loading forecast", e);
@@ -155,6 +166,68 @@ public class DailyActivity extends AppCompatActivity {
 
         // Đánh dấu "7 ngày" đã chọn khi mở màn hình này
         bottomNav.post(() -> bottomNav.setSelectedItemId(R.id.nav_daily));
+    }
+
+    private void setupToggleButtons() {
+        btnList.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                switchToListView();
+            }
+
+        });
+
+        btnChart.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                switchToChartView();
+            }
+        });
+
+        // Set initial state
+        switchToListView();
+    }
+
+    private void switchToListView() {
+        isChartView = false;
+
+        // Update UI
+        recyclerDaily.setVisibility(View.VISIBLE);
+        chartContainer.setVisibility(View.GONE);
+        tvTitle.setText("Dự báo thời tiết trong 7 ngày");
+
+        // Update button states
+        btnList.setBackgroundResource(R.drawable.toggle_button_selected);
+        btnList.setTextColor(Color.parseColor("#FFFFFF"));
+        btnChart.setBackgroundResource(R.drawable.toggle_button_unselected);
+        btnChart.setTextColor(Color.parseColor("#666666"));
+
+        // Thêm hiệu ứng cho danh sách
+        LayoutAnimationController animation = android.view.animation.AnimationUtils.loadLayoutAnimation(
+                this, R.anim.layout_animation_fall_down);
+        recyclerDaily.setLayoutAnimation(animation);
+        recyclerDaily.scheduleLayoutAnimation();
+    }
+
+    private void switchToChartView() {
+        isChartView = true;
+
+        // Update UI
+        recyclerDaily.setVisibility(View.GONE);
+        chartContainer.setVisibility(View.VISIBLE);
+        tvTitle.setText("Dự báo thời tiết trong 7 ngày");
+
+        // Update button states
+        btnChart.setBackgroundResource(R.drawable.toggle_button_selected);
+        btnChart.setTextColor(Color.parseColor("#FFFFFF"));
+        btnList.setBackgroundResource(R.drawable.toggle_button_unselected);
+        btnList.setTextColor(Color.parseColor("#666666"));
+
+        // Setup charts with current data
+        if (currentData != null && !currentData.isEmpty()) {
+            ChartHelper.setupTemperatureChart(temperatureChart, currentData);
+            ChartHelper.setupPrecipitationChart(precipitationChart, currentData);
+        }
     }
 }
 

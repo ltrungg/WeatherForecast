@@ -39,6 +39,7 @@ public class WeatherResponse {
         public List<String> sunset;
         public List<Double> uv_index_max;
         public List<Double> precipitation_sum;
+        public List<Double> precipitation_probability_max;  // %
         public List<Integer> weathercode;
         public List<Double> windspeed_10m_max;   // km/h
         public List<Double> winddirection_10m_dominant;
