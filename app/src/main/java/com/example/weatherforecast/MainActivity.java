@@ -1,5 +1,9 @@
 package com.example.weatherforecast;
 
+import com.example.weatherforecast.data.WeatherRepository;
+import com.example.weatherforecast.utils.HourlyForecastActivity; // << LƯU Ý: Dòng này có vẻ sai đường dẫn
+import com.example.weatherforecast.network.OpenMeteoClient;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
@@ -33,7 +37,13 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.example.weatherforecast.data.WeatherRepository;
+import com.example.weatherforecast.utils.HourlyForecastActivity;
+import com.example.weatherforecast.network.OpenMeteoClient;
 public class MainActivity extends AppCompatActivity {
+
+    private long currentLocationId = -1; // Biến mới
+    private WeatherRepository repo;
 
     // UI: Section 1
     private TextView tvCity, tvDate, tvTemperature, tvDescription, tvMinMax;
@@ -69,6 +79,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         bindViews();
+        repo = new WeatherRepository(this);
         initPermissionsLaunchers();
         initBottomNav();
         initStaticHeader();
@@ -127,33 +138,49 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initBottomNav() {
-        // Đặt tab mặc định
         bottomNavigationView.setSelectedItemId(R.id.nav_now);
 
-        bottomNavigationView.setOnItemSelectedListener(new BottomNavigationView.OnItemSelectedListener() {
-            @Override public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                int id = item.getItemId();
-                if (id == R.id.nav_now) {
-                    // Cuộn lên đầu
-                    scrollMain.smoothScrollTo(0, 0);
-                    return true;
-                } else if (id == R.id.nav_hourly) {
-                    // Theo giờ (mở Activity khác nếu đã có)
-                    startActivity(new Intent(MainActivity.this, com.example.weatherforecast.network.DailyActivity.class));
-                    return true;
-                } else if (id == R.id.nav_daily) {
-                    // 7 ngày
-                    startActivity(new Intent(MainActivity.this, com.example.weatherforecast.network.DailyActivity.class));
-                    return true;
-                } else if (id == R.id.nav_fav) {
-                    startActivity(new Intent(MainActivity.this, FavoritesActivity.class));
-                    return true;
-                } else if (id == R.id.nav_settings) {
-                    startActivity(new Intent(MainActivity.this, SettingsActivity.class));
-                    return true;
-                }
-                return false;
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            int id = item.getItemId();
+
+            if (id == R.id.nav_now) {
+                scrollMain.smoothScrollTo(0, 0);
+                return true;
             }
+
+            // === LOGIC MỚI: KIỂM TRA ID TRƯỚC KHI CHUYỂN TRANG ===
+            // Các trang "Theo giờ" và "7 ngày" cần có ID vị trí
+            if (id == R.id.nav_hourly || id == R.id.nav_daily) {
+                if (currentLocationId == -1) {
+                    Toast.makeText(this, "Chưa có dữ liệu vị trí", Toast.LENGTH_SHORT).show();
+                    return true; // Dừng lại nếu chưa có ID
+                }
+            }
+
+            // === LOGIC MỚI: TẠO INTENT VỚI ĐƯỜNG DẪN ĐÚNG ===
+            Intent intent = null;
+            if (id == R.id.nav_hourly) {
+                // 🛑 LƯU Ý: Dòng này trong Code A của bạn bị sai đường dẫn
+                intent = new Intent(this, HourlyForecastActivity.class);
+                intent.putExtra("LOCATION_ID", currentLocationId);
+            } else if (id == R.id.nav_daily) {
+                // Sửa đường dẫn đúng cho DailyActivity
+                // Giả định DailyActivity nằm trong package 'network'
+                intent = new Intent(this, com.example.weatherforecast.network.DailyActivity.class);
+                intent.putExtra("LOCATION_ID", currentLocationId);
+            } else if (id == R.id.nav_fav) {
+                // Giả định FavoritesActivity nằm trong package chính
+                intent = new Intent(this, com.example.weatherforecast.FavoritesActivity.class);
+            } else if (id == R.id.nav_settings) {
+                // Giả định SettingsActivity nằm trong package chính
+                intent = new Intent(this, com.example.weatherforecast.SettingsActivity.class);
+            }
+
+            if (intent != null) {
+                startActivity(intent);
+            }
+
+            return true;
         });
     }
 
@@ -198,18 +225,69 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadWeatherWithBestEffort() {
-        // 1) Thử lấy last known location nhanh
+        // 1) Thử lấy last known location nhanh (Logic từ A)
         Location loc = getLastKnownLocationSafe();
-        // 2) Chạy IO giả lập gọi API, sau đó render
+
+        // 2) Chạy IO (Threading từ A)
         io.execute(() -> {
-            // Giả lập latency 600ms
-            try { Thread.sleep(600); } catch (InterruptedException ignored) { }
+            try {
+                // --- Logic data từ B ---
+                // Dùng tọa độ GPS (A), nếu không có thì fallback về tọa độ (B)
+                double lat = (loc != null) ? loc.getLatitude() : 10.776; // HCM default
+                double lon = (loc != null) ? loc.getLongitude() : 106.700; // HCM default
+                String timezone = "auto";
+                boolean isCurrent = (loc != null); // Đánh dấu đây là vị trí GPS
 
-            // TODO: thay bằng gọi API thực tế (Retrofit/HttpUrlConnection)
-            WeatherData data = mockFetch(loc);
+                // Vấn đề: Code B cần City/Country để insert, nhưng Code A (GPS) không có.
+                // Tạm thời dùng logic của B (hardcode) để chạy.
+                // Nâng cấp: Cần một Reverse Geocoder ở đây để đổi lat/lon -> city.
+                String cityName = "Ho Chi Minh City";
+                String country = "VN";
+                String admin1 = "Ho Chi Minh";
 
-            cached = data;
-            main.post(() -> render(data));
+                long locId = repo.insertOrGetLocation(
+                        cityName, country, admin1, null,
+                        lat, lon, timezone, isCurrent
+                );
+                this.currentLocationId = locId; // <-- Cập nhật ID
+                repo.addFavorite(locId); // <-- Thêm yêu thích
+
+                // Gọi API để lấy dữ liệu (từ B)
+                new OpenMeteoClient().fetchAndStore(lat, lon, "auto", locId, repo); // <-- GỌI API THẬT
+
+                // Lấy dữ liệu từ DB (từ B)
+                var cards = repo.getFavoritesCards(); // <-- LẤY TỪ DB
+                if (cards.isEmpty()) {
+                    main.post(() -> Toast.makeText(MainActivity.this, "Không có dữ liệu", Toast.LENGTH_SHORT).show());
+                    return;
+                }
+                var c = cards.get(0); // Lấy card đầu tiên
+
+                // --- Bước Thích Ứng (Adapt) ---
+                // Chuyển model của B (FavoriteCard) về model của A (WeatherData)
+                WeatherData data = new WeatherData();
+                data.city = c.name;
+                data.temperature = (c.tempC != null) ? String.format(Locale.getDefault(),"%.0f°", c.tempC) : "--";
+                data.description = (c.condition != null) ? c.condition : "";
+                data.wind = (c.windKmh != null) ? String.format(Locale.getDefault(),"%.0f km/h", c.windKmh) : "--";
+                data.humidity = (c.humidity != null) ? String.format(Locale.getDefault(),"%.0f%%", c.humidity) : "--";
+                data.visibility = (c.visibilityKm != null) ? String.format(Locale.getDefault(),"%.1f km", c.visibilityKm) : "--";
+
+                // Các trường A cần nhưng B (repo.getFavoritesCards) không cung cấp:
+                data.maxTemp = "--°";     // Logic B (FavoriteCard) không có
+                data.minTemp = "--°";     // Logic B (FavoriteCard) không có
+                data.pressure = "-- mb";  // Logic B (FavoriteCard) không có
+                data.sunrise = "--:--";   // Logic B (FavoriteCard) không có
+                data.sunset = "--:--";    // Logic B (FavoriteCard) không có
+
+                // Cập nhật cache và render (Logic từ A)
+                cached = data;
+                main.post(() -> render(data));
+
+            } catch (Exception e) {
+                android.util.Log.e("APP", "Fetch error", e);
+                main.post(() -> Toast.makeText(MainActivity.this, "Lỗi tải dữ liệu", Toast.LENGTH_SHORT).show());
+            }
         });
     }
 

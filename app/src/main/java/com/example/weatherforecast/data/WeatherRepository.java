@@ -74,6 +74,23 @@ public class WeatherRepository {
     w.insertWithOnConflict("favorites", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
     }
 
+    public void addFavorite(long locationId) {
+        SQLiteDatabase w = db.writable();
+        w.beginTransaction();
+        try {
+            // Sử dụng câu lệnh SQL để chèn location_id vào bảng favorites
+            // và tự động tính toán 'sort_order' để địa điểm mới luôn nằm cuối.
+            w.execSQL(
+                    "INSERT INTO favorites (location_id, sort_order) " +
+                            "VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM favorites))",
+                    new Object[]{locationId}
+            );
+            w.setTransactionSuccessful();
+        } finally {
+            w.endTransaction();
+        }
+    }
+
     public void removeFavorite(long locationId) {
         SQLiteDatabase w = db.writable();
         w.delete("favorites", "location_id = ?", new String[]{String.valueOf(locationId)});
@@ -197,6 +214,43 @@ public class WeatherRepository {
             }
         }
         return null;
+    }
+
+    public List<HourlyEntry> getHourlyForecast(long locationId) {
+        SQLiteDatabase r = db.readable();
+        List<HourlyEntry> out = new ArrayList<>();
+
+        // Lấy dữ liệu hourly từ hiện tại trở đi, tối đa 48 giờ
+        long currentTime = System.currentTimeMillis() / 1000;
+        long limitTime = currentTime + (48 * 3600); // 48 giờ từ bây giờ
+
+        try (Cursor c = r.rawQuery(
+                "SELECT ts, temp_c, humidity_pct, wind_mps, wind_deg, clouds_pct, " +
+                        "pop_pct, precip_mm, uvi, pressure_hpa, condition_code, condition_text, icon_code " +
+                        "FROM weather_hourly " +
+                        "WHERE location_id = ? AND ts >= ? AND ts <= ? " +
+                        "ORDER BY ts ASC LIMIT 48",
+                new String[]{String.valueOf(locationId), String.valueOf(currentTime), String.valueOf(limitTime)})) {
+
+            while (c.moveToNext()) {
+                HourlyEntry h = new HourlyEntry();
+                h.ts = c.getLong(0);
+                h.tempC = c.getDouble(1);
+                h.humidity = c.isNull(2) ? null : c.getDouble(2);
+                h.windMps = c.isNull(3) ? null : c.getDouble(3);
+                h.windDeg = c.isNull(4) ? null : c.getDouble(4);
+                h.clouds = c.isNull(5) ? null : c.getDouble(5);
+                h.popPct = c.isNull(6) ? null : c.getDouble(6);
+                h.precipMm = c.isNull(7) ? null : c.getDouble(7);
+                h.uvi = c.isNull(8) ? null : c.getDouble(8);
+                h.pressure = c.isNull(9) ? null : c.getDouble(9);
+                h.code = c.getString(10);
+                h.text = c.getString(11);
+                h.icon = c.getString(12);
+                out.add(h);
+            }
+        }
+        return out;
     }
 
     // Lấy thời tiết hiện tại cho một location
