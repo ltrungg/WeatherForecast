@@ -134,24 +134,47 @@ public class WeatherRepository {
     public List<FavoriteCard> getFavoritesCards() {
         SQLiteDatabase r = db.readable();
         List<FavoriteCard> out = new ArrayList<>();
-        try (Cursor c = r.rawQuery(
-                "SELECT sort_order, location_id, name, country, temp_c, feels_like_c, " +
-                        "humidity_pct, wind_kmh, visibility_km, condition_text, icon_code, updated_at " +
-                        "FROM v_favorites_current ORDER BY sort_order ASC, name ASC", null)) {
+        String query = "SELECT " +
+                "vfc.sort_order, vfc.location_id, vfc.name, vfc.country, vfc.temp_c, vfc.feels_like_c, " +
+                "vfc.humidity_pct, vfc.wind_kmh, vfc.visibility_km, vfc.condition_text, vfc.icon_code, vfc.updated_at, " +
+                "(SELECT temp_max_c FROM weather_daily wd WHERE wd.location_id = vfc.location_id ORDER BY wd.date_ts ASC LIMIT 1) AS maxTempC, " +
+                "(SELECT temp_min_c FROM weather_daily wd WHERE wd.location_id = vfc.location_id ORDER BY wd.date_ts ASC LIMIT 1) AS minTempC " +
+                "FROM v_favorites_current AS vfc " +
+                "ORDER BY vfc.sort_order ASC, vfc.name ASC";
+
+        try (Cursor c = r.rawQuery(query, null)) {
+            int sortOrderCol = c.getColumnIndexOrThrow("sort_order");
+            int locationIdCol = c.getColumnIndexOrThrow("location_id");
+            int nameCol = c.getColumnIndexOrThrow("name");
+            int countryCol = c.getColumnIndexOrThrow("country");
+            int tempCCol = c.getColumnIndexOrThrow("temp_c");
+            int feelsLikeCCol = c.getColumnIndexOrThrow("feels_like_c");
+            int humidityCol = c.getColumnIndexOrThrow("humidity_pct");
+            int windKmhCol = c.getColumnIndexOrThrow("wind_kmh");
+            int visibilityKmCol = c.getColumnIndexOrThrow("visibility_km");
+            int conditionCol = c.getColumnIndexOrThrow("condition_text");
+            int iconCol = c.getColumnIndexOrThrow("icon_code");
+            int updatedAtCol = c.getColumnIndexOrThrow("updated_at");
+            int maxTempCCol = c.getColumnIndexOrThrow("maxTempC"); // Cột mới
+            int minTempCCol = c.getColumnIndexOrThrow("minTempC"); // Cột mới
+
             while (c.moveToNext()) {
                 FavoriteCard f = new FavoriteCard();
-                f.sortOrder   = c.getInt(0);
-                f.locationId  = c.getLong(1);
-                f.name        = c.getString(2);
-                f.country     = c.getString(3);
-                f.tempC       = c.isNull(4) ? null : c.getDouble(4);
-                f.feelsLikeC  = c.isNull(5) ? null : c.getDouble(5);
-                f.humidity    = c.isNull(6) ? null : c.getDouble(6);
-                f.windKmh     = c.isNull(7) ? null : c.getDouble(7);
-                f.visibilityKm= c.isNull(8) ? null : c.getDouble(8);
-                f.condition   = c.getString(9);
-                f.icon        = c.getString(10);
-                f.updatedAt   = c.getLong(11);
+                f.sortOrder   = c.getInt(sortOrderCol);
+                f.locationId  = c.getLong(locationIdCol);
+                f.name        = c.getString(nameCol);
+                f.country     = c.getString(countryCol);
+                f.condition   = c.getString(conditionCol);
+                f.icon        = c.getString(iconCol);
+                f.updatedAt   = c.getLong(updatedAtCol);
+                f.tempC       = c.isNull(tempCCol) ? null : c.getDouble(tempCCol);
+                f.feelsLikeC  = c.isNull(feelsLikeCCol) ? null : c.getDouble(feelsLikeCCol);
+                f.humidity    = c.isNull(humidityCol) ? null : c.getDouble(humidityCol);
+                f.windKmh     = c.isNull(windKmhCol) ? null : c.getDouble(windKmhCol);
+                f.visibilityKm= c.isNull(visibilityKmCol) ? null : c.getDouble(visibilityKmCol);
+                f.maxTempC    = c.isNull(maxTempCCol) ? null : c.getDouble(maxTempCCol);
+                f.minTempC    = c.isNull(minTempCCol) ? null : c.getDouble(minTempCCol);
+
                 out.add(f);
             }
         }
@@ -174,22 +197,6 @@ public class WeatherRepository {
             }
         }
         return null;
-    }
-
-    // Model phụ
-    public static class FavoriteCard {
-        public int sortOrder;
-        public long locationId;
-        public String name, country, condition, icon;
-        public Double tempC, feelsLikeC, humidity, windKmh, visibilityKm;
-        public long updatedAt;
-    }
-
-    public static class HourlyEntry {
-        public long ts;
-        public double tempC;
-        public Double humidity, windMps, windDeg, clouds, popPct, precipMm, uvi, pressure;
-        public String code, text, icon;
     }
 
     // Lấy thời tiết hiện tại cho một location
@@ -308,8 +315,22 @@ public class WeatherRepository {
 // ===========================
 // Model phụ
 // ===========================
+    public static class FavoriteCard {
+        public int sortOrder;
+        public long locationId;
+        public String name, country, condition, icon;
+        public Double tempC, feelsLikeC, humidity, windKmh, visibilityKm;
+        public long updatedAt;
+        public Double maxTempC;
+        public Double minTempC;
+    }
 
-
+    public static class HourlyEntry {
+        public long ts;
+        public double tempC;
+        public Double humidity, windMps, windDeg, clouds, popPct, precipMm, uvi, pressure;
+        public String code, text, icon;
+    }
 
     public static class DailyEntry {
         public long dateTs;
