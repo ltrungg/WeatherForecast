@@ -4,13 +4,18 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.MenuItem;
+import android.view.View;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.cardview.widget.CardView;
+import androidx.core.content.ContextCompat;
+import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -19,10 +24,14 @@ import com.example.weatherforecast.network.DailyActivity;
 import com.example.weatherforecast.network.FavoriteAdapter;
 import com.example.weatherforecast.network.OpenMeteoClient;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.button.MaterialButtonToggleGroup; // Import đúng lớp
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationBarView;
 
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 public class FavoritesActivity extends AppCompatActivity implements FavoriteAdapter.OnFavoriteClickListener {
 
@@ -34,6 +43,12 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
     private BottomNavigationView bottomNavigationView;
     private ActivityResultLauncher<Intent> addLocationLauncher;
 
+    private MaterialButtonToggleGroup toggleGroup;
+    private View compareContainer;
+    private CardView cardHighest, cardLowest, cardAverage;
+    private boolean isCompareMode = false;
+    private ProgressBar progressBar;
+    private NestedScrollView nestedScrollView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,16 +61,21 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         recyclerView = findViewById(R.id.recycler_view_favorites);
         FloatingActionButton fabAdd = findViewById(R.id.fab_add);
         bottomNavigationView = findViewById(R.id.bottomNav);
+        toggleGroup = findViewById(R.id.toggleGroup);
+        compareContainer = findViewById(R.id.compareContainer);
+        cardHighest = findViewById(R.id.cardHighest);
+        cardLowest = findViewById(R.id.cardLowest);
+        cardAverage = findViewById(R.id.cardAverage);
+        progressBar = findViewById(R.id.progress_bar);
+        nestedScrollView = findViewById(R.id.nested_scroll_view);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        //loadAndDisplayFavorites();
         addLocationLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
-                    // Đây là nơi xử lý kết quả trả về từ SearchActivity
                     if (result.getResultCode() == Activity.RESULT_OK) {
-                        Log.d("FavoritesActivity", "Nhận được tín hiệu có địa điểm mới. Đang tải lại danh sách...");
+                        Log.d("FavoritesActivity", "New location added. Reloading list...");
                         loadAndDisplayFavorites();
                     }
                 });
@@ -66,6 +86,7 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         });
 
         setupBottomNavigation();
+        setupToggleGroup();
     }
 
     @Override
@@ -74,70 +95,144 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         loadAndDisplayFavorites();
     }
 
-    private void setupBottomNavigation() {
-        bottomNavigationView.setSelectedItemId(R.id.nav_fav);
+    private void setupToggleGroup() {
+        if (toggleGroup == null) return;
 
-        bottomNavigationView.setOnItemSelectedListener(new NavigationBarView.OnItemSelectedListener() {
-            @Override
-            public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                int itemId = item.getItemId();
-                if (itemId == R.id.nav_now) {
-                    finish();
-                    return true;
-                } else if (itemId == R.id.nav_hourly) {
-                    return false;
-                } else if (itemId == R.id.nav_daily) {
-                    Intent dailyIntent = new Intent(FavoritesActivity.this, DailyActivity.class);
-                    startActivity(dailyIntent);
-                    finish();
-                    return true;
-                } else if (itemId == R.id.nav_fav) {
-                    return true;
-                } else if (itemId == R.id.nav_settings) {
-                    Intent settingsIntent = new Intent(FavoritesActivity.this, SettingsActivity.class);
-                    startActivity(settingsIntent);
-                    finish();
-                    return true;
+        toggleGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (isChecked && adapter != null) {
+                if (checkedId == R.id.btnList) {
+                    isCompareMode = false;
+                    compareContainer.setVisibility(View.GONE);
+                    adapter.setCompareMode(false, favoriteCards);
+                } else if (checkedId == R.id.btnCompare) {
+                    isCompareMode = true;
+                    compareContainer.setVisibility(View.VISIBLE);
+                    updateCompareSummary();
+                    adapter.setCompareMode(true, favoriteCards);
                 }
-                return false;
             }
         });
     }
 
+
+    private void setupBottomNavigation() {
+        bottomNavigationView.setSelectedItemId(R.id.nav_fav);
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.nav_now) {
+                finish();
+                return true;
+            } else if (itemId == R.id.nav_daily) {
+                startActivity(new Intent(FavoritesActivity.this, DailyActivity.class));
+                finish();
+                return true;
+            } else if (itemId == R.id.nav_fav) {
+                return true;
+            } else if (itemId == R.id.nav_settings) {
+                startActivity(new Intent(FavoritesActivity.this, SettingsActivity.class));
+                finish();
+                return true;
+            }
+            return false;
+        });
+    }
+
     private void loadAndDisplayFavorites() {
-        favoriteCards = repository.getFavoritesCards();
-
-        if (adapter == null) {
-            adapter = new FavoriteAdapter(this, favoriteCards, this);
-            recyclerView.setAdapter(adapter);
-        } else {
-            adapter.updateData(favoriteCards);
-        }
-
-        updateSubtitle();
+        progressBar.setVisibility(View.VISIBLE);
+        recyclerView.setVisibility(View.GONE);
+        compareContainer.setVisibility(View.GONE);
 
         new Thread(() -> {
-            OpenMeteoClient openMeteoClient = new OpenMeteoClient();
-            for (WeatherRepository.FavoriteCard card : favoriteCards) {
-                // Lấy thông tin chi tiết (lat, lon) của địa điểm
-                WeatherRepository.LocationInfo locationInfo = repository.getLocation(card.locationId);
-                if (locationInfo != null) {
-                    Log.d("FavoritesActivity", "Đang cập nhật thời tiết cho: " + locationInfo.name);
-                    // Gọi API để lấy dữ liệu mới nhất và lưu vào CSDL
-                    openMeteoClient.fetchAndStore(locationInfo.lat, locationInfo.lon, "auto", card.locationId, repository);
-                }
-            }
-
-            // Sau khi gọi API xong, tải lại dữ liệu từ CSDL và cập nhật giao diện trên luồng chính
+            List<WeatherRepository.FavoriteCard> updatedCards = repository.getFavoritesCards();
+            this.favoriteCards = updatedCards;
             runOnUiThread(() -> {
-                List<WeatherRepository.FavoriteCard> updatedCards = repository.getFavoritesCards();
-                if (adapter != null) {
-                    adapter.updateData(updatedCards);
+                if (adapter == null) {
+                    adapter = new FavoriteAdapter(this, this.favoriteCards, this);
+                    recyclerView.setAdapter(adapter);
+                } else {
+                    adapter.updateData(this.favoriteCards);
                 }
-                Log.d("FavoritesActivity", "Đã cập nhật xong giao diện sau khi gọi API.");
+                if (isCompareMode) {
+                            toggleGroup.check(R.id.btnCompare);
+                            compareContainer.setVisibility(View.VISIBLE);
+                            adapter.setCompareMode(true, this.favoriteCards);
+                            updateCompareSummary();
+                } else {
+                            toggleGroup.check(R.id.btnList);
+                            compareContainer.setVisibility(View.GONE);
+                            adapter.setCompareMode(false, this.favoriteCards);
+                }
+                updateSubtitle();
+                progressBar.setVisibility(View.GONE);
+                recyclerView.setVisibility(View.VISIBLE);
+                nestedScrollView.setVisibility(View.VISIBLE);
             });
         }).start();
     }
+
+    private void updateCompareSummary() {
+        if (favoriteCards == null || favoriteCards.isEmpty() || compareContainer == null) {
+            compareContainer.setVisibility(View.GONE);
+            return;
+        }
+
+        WeatherRepository.FavoriteCard highest = Collections.max(favoriteCards, Comparator.comparing(c -> c.maxTempC != null ? c.maxTempC : Double.MIN_VALUE));
+        WeatherRepository.FavoriteCard lowest = Collections.min(favoriteCards, Comparator.comparing(c -> c.minTempC != null ? c.minTempC : Double.MAX_VALUE));
+
+        double totalTemp = 0;
+        int count = 0;
+        for(WeatherRepository.FavoriteCard card : favoriteCards) {
+            if (card.tempC != null) {
+                totalTemp += card.tempC;
+                count++;
+            }
+        }
+
+        TextView tvHighestTitle = cardHighest.findViewById(R.id.tvSummaryTitle);
+        TextView tvHighestTemp = cardHighest.findViewById(R.id.tvSummaryTemp);
+        TextView tvHighestCity = cardHighest.findViewById(R.id.tvSummaryCity);
+        ImageView ivHighestIcon = cardHighest.findViewById(R.id.ivSummaryIcon);
+        if (tvHighestTitle != null && tvHighestTemp != null && tvHighestCity != null) {
+            tvHighestTitle.setText("Cao nhất");
+            tvHighestTemp.setText(String.format(Locale.getDefault(), "%.0f°", highest.maxTempC));
+            tvHighestCity.setText(highest.name);
+            ivHighestIcon.setVisibility(View.VISIBLE);
+            ivHighestIcon.setImageResource(R.drawable.ic_trend_up);
+            ivHighestIcon.setColorFilter(ContextCompat.getColor(this, R.color.hot_trend_color));
+            cardHighest.setCardBackgroundColor(ContextCompat.getColor(this, R.color.bg_hot_card));
+        }
+
+        TextView tvLowestTitle = cardLowest.findViewById(R.id.tvSummaryTitle);
+        TextView tvLowestTemp = cardLowest.findViewById(R.id.tvSummaryTemp);
+        TextView tvLowestCity = cardLowest.findViewById(R.id.tvSummaryCity);
+        ImageView ivLowestIcon = cardLowest.findViewById(R.id.ivSummaryIcon);
+        if (tvLowestTitle != null && tvLowestTemp != null && tvLowestCity != null) {
+            tvLowestTitle.setText("Thấp nhất");
+            tvLowestTemp.setText(String.format(Locale.getDefault(), "%.0f°", lowest.minTempC));
+            tvLowestCity.setText(lowest.name);
+            ivLowestIcon.setVisibility(View.VISIBLE);
+            ivLowestIcon.setImageResource(R.drawable.ic_trend_down);
+            ivLowestIcon.setColorFilter(ContextCompat.getColor(this, R.color.cold_trend_color));
+            cardLowest.setCardBackgroundColor(ContextCompat.getColor(this, R.color.bg_cold_card));
+        }
+
+        TextView tvAverageTitle = cardAverage.findViewById(R.id.tvSummaryTitle);
+        TextView tvAverageTemp = cardAverage.findViewById(R.id.tvSummaryTemp);
+        TextView tvAverageCity = cardAverage.findViewById(R.id.tvSummaryCity);
+        ImageView ivAverageIcon = cardAverage.findViewById(R.id.ivSummaryIcon);
+        if (tvAverageTitle != null && tvAverageTemp != null && tvAverageCity != null) {
+            tvAverageTitle.setText("Trung bình");
+            if (count > 0) {
+                tvAverageTemp.setText(String.format(Locale.getDefault(), "%.0f°", totalTemp / count));
+            } else {
+                tvAverageTemp.setText("--°");
+            }
+            tvAverageCity.setText(count + " vị trí");
+            ivAverageIcon.setImageResource(R.drawable.ic_average_temperature);
+            ivAverageIcon.setVisibility(View.VISIBLE);
+        }
+    }
+
 
     private void updateSubtitle() {
         if (favoriteCards != null) {
@@ -157,14 +252,13 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
     @Override
     public void onFavoriteDelete(long locationId, int position) {
         repository.removeFavorite(locationId);
-
         favoriteCards.remove(position);
-
         adapter.notifyItemRemoved(position);
-
         adapter.notifyItemRangeChanged(position, favoriteCards.size());
-
         updateSubtitle();
-
+        if (isCompareMode) {
+            updateCompareSummary();
+        }
+        loadAndDisplayFavorites();
     }
 }
