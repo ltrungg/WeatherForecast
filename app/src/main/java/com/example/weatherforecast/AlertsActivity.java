@@ -1,6 +1,7 @@
 package com.example.weatherforecast;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -226,6 +227,7 @@ public class AlertsActivity extends AppCompatActivity {
         TextView tvTitle, tvSub;
         MaterialSwitch swActive;
         ImageButton btnDel;
+        @SuppressLint("WrongViewCast")
         AlertsVH(View v) {
             super(v);
             tvTitle = v.findViewById(R.id.tvTitle);
