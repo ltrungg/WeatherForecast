@@ -48,22 +48,34 @@ public class SearchActivity extends AppCompatActivity {
     private void setupRecyclerView() {
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         adapter = new SearchAdapter(searchResults, location -> {
-            long locationId = repository.insertOrGetLocation(
-                    location.getName(),
-                    location.getCountry(),
-                    location.getRegion(),
-                    "",
-                    location.getLat(),
-                    location.getLon(),
-                    "",
-                    false
-            );
+            Toast.makeText(this, "Đang thêm " + location.getName() + "...", Toast.LENGTH_SHORT).show();
+            new Thread(() -> {
+                long locationId = repository.insertOrGetLocation(
+                        location.getName(),
+                        location.getCountry(),
+                        location.getRegion(),
+                        "", // admin2
+                        location.getLat(),
+                        location.getLon(),
+                        "",
+                        false
+                );
 
-            repository.addFavorite(locationId, location.getName(), location.getCountry());
-
-            Intent resultIntent = new Intent();
-            setResult(Activity.RESULT_OK, resultIntent); // Gửi tín hiệu thành công
-            finish();
+                OpenMeteoClient client = new OpenMeteoClient();
+                client.fetchAndStore(
+                        location.getLat(),
+                        location.getLon(),
+                        "auto",
+                        locationId,
+                        repository
+                );
+                repository.addFavorite(locationId, location.getName(), location.getCountry());
+                runOnUiThread(() -> {
+                    Intent resultIntent = new Intent();
+                    setResult(Activity.RESULT_OK, resultIntent);
+                    finish();
+                });
+            }).start();
         });
         recyclerView.setAdapter(adapter);
     }
