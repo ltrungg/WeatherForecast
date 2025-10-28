@@ -147,6 +147,16 @@ public class HourlyForecastActivity extends AppCompatActivity {
                         Toast.LENGTH_SHORT).show());
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Đảm bảo nút "Theo giờ" được highlight khi quay lại
+        BottomNavigationView bottom = findViewById(R.id.bottomNav);
+        if (bottom != null) {
+            bottom.setSelectedItemId(R.id.nav_hourly);
+        }
+    }
+
     /** Đọc DB và hiển thị danh sách (và biểu đồ nếu tab Biểu đồ đang mở) */
     private void loadHourly() {
         List<WeatherRepository.HourlyEntry> list = repo.getHourlyForecast(locationId);

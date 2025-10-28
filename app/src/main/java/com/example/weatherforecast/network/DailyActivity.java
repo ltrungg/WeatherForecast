@@ -158,6 +158,15 @@ public class DailyActivity extends AppCompatActivity {
         bottomNav.post(() -> bottomNav.setSelectedItemId(R.id.nav_daily));
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Đảm bảo nút "7 ngày" được highlight khi quay lại
+        if (bottomNav != null) {
+            bottomNav.setSelectedItemId(R.id.nav_daily);
+        }
+    }
+
     private long resolveOrCreateDefaultLocationId() {
         WeatherRepository r = new WeatherRepository(this);
         long id = r.getCurrentLocationIdOrAny();

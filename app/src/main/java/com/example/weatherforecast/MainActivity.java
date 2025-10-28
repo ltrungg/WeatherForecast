@@ -158,8 +158,8 @@ public class MainActivity extends AppCompatActivity {
 
             if (id == R.id.nav_fav) {
                 startActivity(new Intent(MainActivity.this, FavoritesActivity.class));
-                return true;
-            }
+                    return true;
+                }
 
             if (id == R.id.nav_settings) {
                 startActivity(new Intent(MainActivity.this, SettingsActivity.class));
@@ -460,9 +460,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Đảm bảo nút "Hiện tại" được highlight khi quay lại
+        if (bottomNavigationView != null) {
+            bottomNavigationView.setSelectedItemId(R.id.nav_now);
+        }
+        loadWeatherWithBestEffort();
+    }
+
+    @Override
     protected void onStart() {
         super.onStart();
-        loadWeatherWithBestEffort();
     }
 
     @Override
