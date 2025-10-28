@@ -14,7 +14,7 @@
     <!-- Vị trí (foreground) -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -54,9 +54,10 @@
             android:exported="false"
             android:label="Cảnh báo thời tiết" />
 
+        <activity android:name=".HourlyForecastActivity" android:exported="false"/>
+
         <activity
-            android:name=".utils.HourlyForecastActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
+            android:name=".AboutActivity"
+            android:exported="false" />
     </application>
 </manifest>

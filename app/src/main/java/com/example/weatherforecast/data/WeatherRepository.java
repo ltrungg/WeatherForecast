@@ -47,39 +47,102 @@ public class WeatherRepository {
         }
     }
 
-//    public void addFavorite(long locationId) {
-//        SQLiteDatabase w = db.writable();
-//        w.execSQL(
-//                "INSERT OR IGNORE INTO favorites(location_id, sort_order) " +
-//                        "VALUES (?, IFNULL((SELECT MAX(sort_order)+1 FROM favorites), 0))",
-//                new Object[]{locationId}
-//        );
-//    }
-    public void addFavorite(long locationId, String name, String country) {
-    SQLiteDatabase w = db.writable();
-    ContentValues cv = new ContentValues();
-    cv.put("location_id", locationId);
+    // ===========================
+    // BỔ SUNG CHO MainActivity
+    // ===========================
 
-    // Tìm giá trị sort_order lớn nhất hiện tại và cộng thêm 1
-    // IFNULL được dùng để xử lý trường hợp bảng favorites chưa có dòng nào (kết quả là NULL)
-    try (Cursor c = w.rawQuery("SELECT MAX(sort_order) FROM favorites", null)) {
-        int maxSortOrder = -1;
-        if (c.moveToFirst()) {
-            maxSortOrder = c.getInt(0);
+    /** Đặt (lat,lon) làm vị trí hiện tại (current). Nếu chưa có thì chèn mới. Trả về locationId. */
+    public long upsertCurrentLocation(double lat, double lon, String name, String timezone) {
+        SQLiteDatabase w = db.writable();
+        w.beginTransaction();
+        try {
+            // Tìm location theo lat/lon
+            Long existingId = null;
+            try (Cursor c = w.rawQuery(
+                    "SELECT id FROM locations WHERE lat=? AND lon=? LIMIT 1",
+                    new String[]{String.valueOf(lat), String.valueOf(lon)})) {
+                if (c.moveToFirst()) existingId = c.getLong(0);
+            }
+
+            // Reset cờ current về 0 cho tất cả
+            ContentValues reset = new ContentValues();
+            reset.put("is_current_location", 0);
+            w.update("locations", reset, null, null);
+
+            long id;
+            ContentValues cv = new ContentValues();
+            cv.put("name", name);
+            cv.put("lat", lat);
+            cv.put("lon", lon);
+            cv.put("timezone", timezone);
+            cv.put("is_current_location", 1);
+
+            if (existingId == null) {
+                id = w.insert("locations", null, cv);
+                if (id == -1) {
+                    // fallback lấy id vừa chèn
+                    try (Cursor c = w.rawQuery(
+                            "SELECT id FROM locations WHERE lat=? AND lon=? LIMIT 1",
+                            new String[]{String.valueOf(lat), String.valueOf(lon)})) {
+                        if (c.moveToFirst()) id = c.getLong(0);
+                    }
+                }
+            } else {
+                id = existingId;
+                w.update("locations", cv, "id=?", new String[]{String.valueOf(existingId)});
+            }
+
+            w.setTransactionSuccessful();
+            return id;
+        } finally {
+            w.endTransaction();
         }
-        cv.put("sort_order", maxSortOrder + 1);
     }
 
-    // Thêm vào bảng favorites, nếu location_id đã tồn tại thì bỏ qua (IGNORE)
-    w.insertWithOnConflict("favorites", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+    /** Lấy id vị trí current; nếu chưa có thì trả id bất kỳ; nếu bảng rỗng thì trả -1. */
+    public long getCurrentLocationIdOrAny() {
+        SQLiteDatabase r = db.readable();
+        // Ưu tiên current
+        try (Cursor c = r.rawQuery("SELECT id FROM locations WHERE is_current_location=1 LIMIT 1", null)) {
+            if (c.moveToFirst()) return c.getLong(0);
+        }
+        // Lấy bất kỳ
+        try (Cursor c = r.rawQuery("SELECT id FROM locations ORDER BY id LIMIT 1", null)) {
+            if (c.moveToFirst()) return c.getLong(0);
+        }
+        return -1;
+    }
+
+    //    public void addFavorite(long locationId) {
+    //        SQLiteDatabase w = db.writable();
+    //        w.execSQL(
+    //                "INSERT OR IGNORE INTO favorites(location_id, sort_order) " +
+    //                        "VALUES (?, IFNULL((SELECT MAX(sort_order)+1 FROM favorites), 0))",
+    //                new Object[]{locationId}
+    //        );
+    //    }
+    public void addFavorite(long locationId, String name, String country) {
+        SQLiteDatabase w = db.writable();
+        ContentValues cv = new ContentValues();
+        cv.put("location_id", locationId);
+
+        // Tìm giá trị sort_order lớn nhất hiện tại và cộng thêm 1
+        try (Cursor c = w.rawQuery("SELECT MAX(sort_order) FROM favorites", null)) {
+            int maxSortOrder = -1;
+            if (c.moveToFirst()) {
+                maxSortOrder = c.getInt(0);
+            }
+            cv.put("sort_order", maxSortOrder + 1);
+        }
+
+        // Thêm vào bảng favorites, nếu location_id đã tồn tại thì bỏ qua (IGNORE)
+        w.insertWithOnConflict("favorites", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
     }
 
     public void addFavorite(long locationId) {
         SQLiteDatabase w = db.writable();
         w.beginTransaction();
         try {
-            // Sử dụng câu lệnh SQL để chèn location_id vào bảng favorites
-            // và tự động tính toán 'sort_order' để địa điểm mới luôn nằm cuối.
             w.execSQL(
                     "INSERT INTO favorites (location_id, sort_order) " +
                             "VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM favorites))",
@@ -366,9 +429,9 @@ public class WeatherRepository {
         }
     }
 
-// ===========================
-// Model phụ
-// ===========================
+    // ===========================
+    // Model phụ
+    // ===========================
     public static class FavoriteCard {
         public int sortOrder;
         public long locationId;
@@ -414,4 +477,15 @@ public class WeatherRepository {
         public String timezone;
     }
 
+    public long getOrCreateDefaultLocationId() {
+        long id = getCurrentLocationIdOrAny();
+        if (id != -1) return id;
+
+        // Tạo HCM làm mặc định và đặt current
+        return insertOrGetLocation(
+                "Hồ Chí Minh", "VN", null, null,
+                10.776, 106.700, "Asia/Ho_Chi_Minh",
+                true  // isCurrent
+        );
+    }
 }

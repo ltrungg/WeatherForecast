@@ -8,13 +8,11 @@
     android:background="#F6FAFF"
     tools:context=".MainActivity">
 
-    <!-- Cuộn toàn bộ nội dung -->
     <ScrollView
         android:id="@+id/scrollMain"
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintBottom_toTopOf="@id/bottomNavigation"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -32,14 +30,13 @@
             android:paddingBottom="60dp"
             android:background="#F6FAFF">
 
-            <!-- ========== SECTION 1: Thông tin thời tiết chính ========== -->
+            <!-- Header -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:gravity="center"
                 android:orientation="vertical">
 
-                <!-- Thành phố -->
                 <TextView
                     android:id="@+id/tvCity"
                     android:layout_width="wrap_content"
@@ -52,7 +49,6 @@
                     android:textSize="20sp"
                     android:textStyle="bold" />
 
-                <!-- Ngày tháng -->
                 <TextView
                     android:id="@+id/tvDate"
                     android:layout_width="wrap_content"
@@ -63,7 +59,7 @@
                     android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- Thẻ thời tiết chính -->
+            <!-- Card chính -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardMainWeather"
                 android:layout_width="match_parent"
@@ -77,21 +73,20 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="200dp"
+                    android:layout_height="match_parent"
                     android:orientation="vertical"
                     android:gravity="center"
                     android:paddingTop="12dp">
 
-                    <!-- Icon thời tiết -->
                     <ImageView
                         android:id="@+id/imgWeatherIcon"
                         android:layout_width="70dp"
                         android:layout_height="70dp"
                         android:src="@drawable/ic_cloud_24"
                         app:tint="#77A8E8"
-                        android:layout_marginBottom="8dp" />
+                        android:layout_marginBottom="8dp"
+                        android:contentDescription="@string/app_name" />
 
-                    <!-- Nhiệt độ -->
                     <TextView
                         android:id="@+id/tvTemperature"
                         android:layout_width="wrap_content"
@@ -102,7 +97,6 @@
                         android:textStyle="bold"
                         android:layout_marginTop="2dp" />
 
-                    <!-- Mô tả -->
                     <TextView
                         android:id="@+id/tvDescription"
                         android:layout_width="wrap_content"
@@ -113,7 +107,6 @@
                         android:textSize="16sp"
                         android:layout_marginTop="2dp" />
 
-                    <!-- Cao / thấp -->
                     <TextView
                         android:id="@+id/tvMinMax"
                         android:layout_width="wrap_content"
@@ -125,8 +118,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-
-            <!-- ========== SECTION 2: Thông tin chi tiết ========== -->
+            <!-- Chi tiết -->
             <LinearLayout
                 android:id="@+id/layoutWeatherDetails"
                 android:layout_width="match_parent"
@@ -136,7 +128,6 @@
                 android:paddingHorizontal="12dp"
                 android:gravity="center">
 
-                <!-- ========== SECTION 2: Gió, Độ ẩm, Tầm nhìn, Áp suất ========== -->
                 <LinearLayout
                     android:id="@+id/layoutWeatherInfo"
                     android:layout_width="match_parent"
@@ -146,14 +137,13 @@
                     android:paddingHorizontal="16dp"
                     android:gravity="center">
 
-                    <!-- Hàng 1 -->
+                    <!-- Hàng 1: Gió / Độ ẩm -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:weightSum="2">
 
-                        <!-- Gió -->
                         <com.google.android.material.card.MaterialCardView
                             android:layout_width="0dp"
                             android:layout_height="90dp"
@@ -177,8 +167,7 @@
                                     android:drawablePadding="6dp"
                                     android:text="Gió"
                                     android:textColor="#7A869A"
-                                    android:textSize="16sp"
-                                    />
+                                    android:textSize="16sp" />
 
                                 <TextView
                                     android:id="@+id/tvWindValue"
@@ -192,7 +181,6 @@
                             </LinearLayout>
                         </com.google.android.material.card.MaterialCardView>
 
-                        <!-- Độ ẩm -->
                         <com.google.android.material.card.MaterialCardView
                             android:layout_width="0dp"
                             android:layout_height="90dp"
@@ -231,14 +219,13 @@
                         </com.google.android.material.card.MaterialCardView>
                     </LinearLayout>
 
-                    <!-- Hàng 2 -->
+                    <!-- Hàng 2: Tầm nhìn / Lượng mưa -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:weightSum="2">
 
-                        <!-- Tầm nhìn -->
                         <com.google.android.material.card.MaterialCardView
                             android:layout_width="0dp"
                             android:layout_height="90dp"
@@ -276,7 +263,7 @@
                             </LinearLayout>
                         </com.google.android.material.card.MaterialCardView>
 
-                        <!-- Áp suất -->
+                        <!-- ĐỔI NHÃN: Áp suất -> Lượng mưa -->
                         <com.google.android.material.card.MaterialCardView
                             android:layout_width="0dp"
                             android:layout_height="90dp"
@@ -298,7 +285,7 @@
                                     android:layout_height="wrap_content"
                                     android:drawableStart="@drawable/ic_pressure"
                                     android:drawablePadding="6dp"
-                                    android:text="Áp suất"
+                                    android:text="Lượng mưa"
                                     android:textSize="16sp"
                                     android:textColor="#7A869A" />
 
@@ -306,7 +293,7 @@
                                     android:id="@+id/tvPressureValue"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="1013 mb"
+                                    android:text="0 mm"
                                     android:textStyle="bold"
                                     android:textSize="22sp"
                                     android:textColor="#172B4D"
@@ -316,8 +303,7 @@
                     </LinearLayout>
                 </LinearLayout>
 
-
-                <!-- Hàng 2: Bình minh & Hoàng hôn -->
+                <!-- Bình minh & Hoàng hôn -->
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardSunInfo"
                     android:layout_width="340dp"
@@ -335,7 +321,6 @@
                         android:padding="12dp"
                         android:gravity="center">
 
-                        <!-- Bình minh -->
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -347,7 +332,8 @@
                                 android:layout_width="40dp"
                                 android:layout_height="40dp"
                                 android:src="@drawable/ic_sunrise"
-                                app:tint="#FFD966" />
+                                app:tint="#FFD966"
+                                android:contentDescription="@string/app_name" />
 
                             <TextView
                                 android:id="@+id/tvSunriseLabel"
@@ -368,7 +354,6 @@
                                 android:textSize="16sp" />
                         </LinearLayout>
 
-                        <!-- Hoàng hôn -->
                         <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
@@ -380,7 +365,8 @@
                                 android:layout_width="40dp"
                                 android:layout_height="40dp"
                                 android:src="@drawable/ic_sunset"
-                                app:tint="#FFD966" />
+                                app:tint="#FFD966"
+                                android:contentDescription="@string/app_name" />
 
                             <TextView
                                 android:id="@+id/tvSunsetLabel"
@@ -404,10 +390,9 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-
         </LinearLayout>
     </ScrollView>
-    <!-- ========== SECTION 3: Thanh menu dưới (Bottom Navigation) ========== -->
+
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNavigation"
         android:layout_width="0dp"

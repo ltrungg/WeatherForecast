@@ -4,16 +4,14 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.ProgressBar;
+import android.widget.LinearLayout;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.cardview.widget.CardView;
 import androidx.core.content.ContextCompat;
 import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -22,11 +20,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.weatherforecast.data.WeatherRepository;
 import com.example.weatherforecast.network.DailyActivity;
 import com.example.weatherforecast.network.FavoriteAdapter;
-import com.example.weatherforecast.network.OpenMeteoClient;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.android.material.button.MaterialButtonToggleGroup; // Import đúng lớp
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.navigation.NavigationBarView;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -44,8 +40,8 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
     private ActivityResultLauncher<Intent> addLocationLauncher;
 
     private MaterialButtonToggleGroup toggleGroup;
-    private View compareContainer;
-    private CardView cardHighest, cardLowest, cardAverage;
+    private LinearLayout compareContainer;
+    private androidx.cardview.widget.CardView cardHighest, cardLowest, cardAverage;
     private boolean isCompareMode = false;
     private ProgressBar progressBar;
     private NestedScrollView nestedScrollView;
@@ -102,11 +98,11 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
             if (isChecked && adapter != null) {
                 if (checkedId == R.id.btnList) {
                     isCompareMode = false;
-                    compareContainer.setVisibility(View.GONE);
+                    compareContainer.setVisibility(android.view.View.GONE);
                     adapter.setCompareMode(false, favoriteCards);
                 } else if (checkedId == R.id.btnCompare) {
                     isCompareMode = true;
-                    compareContainer.setVisibility(View.VISIBLE);
+                    compareContainer.setVisibility(android.view.View.VISIBLE);
                     updateCompareSummary();
                     adapter.setCompareMode(true, favoriteCards);
                 }
@@ -114,20 +110,30 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         });
     }
 
-
     private void setupBottomNavigation() {
         bottomNavigationView.setSelectedItemId(R.id.nav_fav);
         bottomNavigationView.setOnItemSelectedListener(item -> {
             int itemId = item.getItemId();
             if (itemId == R.id.nav_now) {
+                startActivity(new Intent(FavoritesActivity.this, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
                 finish();
                 return true;
+
+            } else if (itemId == R.id.nav_hourly) {
+                // ✅ Điều hướng sang trang Theo giờ
+                startActivity(new Intent(FavoritesActivity.this, HourlyForecastActivity.class));
+                finish();
+                return true;
+
             } else if (itemId == R.id.nav_daily) {
                 startActivity(new Intent(FavoritesActivity.this, DailyActivity.class));
                 finish();
                 return true;
+
             } else if (itemId == R.id.nav_fav) {
                 return true;
+
             } else if (itemId == R.id.nav_settings) {
                 startActivity(new Intent(FavoritesActivity.this, SettingsActivity.class));
                 finish();
@@ -138,9 +144,9 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
     }
 
     private void loadAndDisplayFavorites() {
-        progressBar.setVisibility(View.VISIBLE);
-        recyclerView.setVisibility(View.GONE);
-        compareContainer.setVisibility(View.GONE);
+        progressBar.setVisibility(android.view.View.VISIBLE);
+        recyclerView.setVisibility(android.view.View.GONE);
+        compareContainer.setVisibility(android.view.View.GONE);
 
         new Thread(() -> {
             List<WeatherRepository.FavoriteCard> updatedCards = repository.getFavoritesCards();
@@ -153,35 +159,41 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
                     adapter.updateData(this.favoriteCards);
                 }
                 if (isCompareMode) {
-                            toggleGroup.check(R.id.btnCompare);
-                            compareContainer.setVisibility(View.VISIBLE);
-                            adapter.setCompareMode(true, this.favoriteCards);
-                            updateCompareSummary();
+                    toggleGroup.check(R.id.btnCompare);
+                    compareContainer.setVisibility(android.view.View.VISIBLE);
+                    adapter.setCompareMode(true, this.favoriteCards);
+                    updateCompareSummary();
                 } else {
-                            toggleGroup.check(R.id.btnList);
-                            compareContainer.setVisibility(View.GONE);
-                            adapter.setCompareMode(false, this.favoriteCards);
+                    toggleGroup.check(R.id.btnList);
+                    compareContainer.setVisibility(android.view.View.GONE);
+                    adapter.setCompareMode(false, this.favoriteCards);
                 }
                 updateSubtitle();
-                progressBar.setVisibility(View.GONE);
-                recyclerView.setVisibility(View.VISIBLE);
-                nestedScrollView.setVisibility(View.VISIBLE);
+                progressBar.setVisibility(android.view.View.GONE);
+                recyclerView.setVisibility(android.view.View.VISIBLE);
+                nestedScrollView.setVisibility(android.view.View.VISIBLE);
             });
         }).start();
     }
 
     private void updateCompareSummary() {
         if (favoriteCards == null || favoriteCards.isEmpty() || compareContainer == null) {
-            compareContainer.setVisibility(View.GONE);
+            compareContainer.setVisibility(android.view.View.GONE);
             return;
         }
 
-        WeatherRepository.FavoriteCard highest = Collections.max(favoriteCards, Comparator.comparing(c -> c.maxTempC != null ? c.maxTempC : Double.MIN_VALUE));
-        WeatherRepository.FavoriteCard lowest = Collections.min(favoriteCards, Comparator.comparing(c -> c.minTempC != null ? c.minTempC : Double.MAX_VALUE));
+        WeatherRepository.FavoriteCard highest = Collections.max(
+                favoriteCards,
+                Comparator.comparing(c -> c.maxTempC != null ? c.maxTempC : Double.MIN_VALUE)
+        );
+        WeatherRepository.FavoriteCard lowest = Collections.min(
+                favoriteCards,
+                Comparator.comparing(c -> c.minTempC != null ? c.minTempC : Double.MAX_VALUE)
+        );
 
         double totalTemp = 0;
         int count = 0;
-        for(WeatherRepository.FavoriteCard card : favoriteCards) {
+        for (WeatherRepository.FavoriteCard card : favoriteCards) {
             if (card.tempC != null) {
                 totalTemp += card.tempC;
                 count++;
@@ -196,7 +208,7 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
             tvHighestTitle.setText("Cao nhất");
             tvHighestTemp.setText(String.format(Locale.getDefault(), "%.0f°", highest.maxTempC));
             tvHighestCity.setText(highest.name);
-            ivHighestIcon.setVisibility(View.VISIBLE);
+            ivHighestIcon.setVisibility(android.view.View.VISIBLE);
             ivHighestIcon.setImageResource(R.drawable.ic_trend_up);
             ivHighestIcon.setColorFilter(ContextCompat.getColor(this, R.color.hot_trend_color));
             cardHighest.setCardBackgroundColor(ContextCompat.getColor(this, R.color.bg_hot_card));
@@ -210,7 +222,7 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
             tvLowestTitle.setText("Thấp nhất");
             tvLowestTemp.setText(String.format(Locale.getDefault(), "%.0f°", lowest.minTempC));
             tvLowestCity.setText(lowest.name);
-            ivLowestIcon.setVisibility(View.VISIBLE);
+            ivLowestIcon.setVisibility(android.view.View.VISIBLE);
             ivLowestIcon.setImageResource(R.drawable.ic_trend_down);
             ivLowestIcon.setColorFilter(ContextCompat.getColor(this, R.color.cold_trend_color));
             cardLowest.setCardBackgroundColor(ContextCompat.getColor(this, R.color.bg_cold_card));
@@ -229,10 +241,9 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
             }
             tvAverageCity.setText(count + " vị trí");
             ivAverageIcon.setImageResource(R.drawable.ic_average_temperature);
-            ivAverageIcon.setVisibility(View.VISIBLE);
+            ivAverageIcon.setVisibility(android.view.View.VISIBLE);
         }
     }
-
 
     private void updateSubtitle() {
         if (favoriteCards != null) {
