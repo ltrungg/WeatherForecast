@@ -132,7 +132,7 @@ public class MainActivity extends AppCompatActivity {
 
         bottomNavigationView.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
-            long locId = resolveOrCreateDefaultLocationId(); // luôn có id hợp lệ
+            long locId = resolveOrGetExistingLocationId(); // KHÔNG tạo mặc định
 
             if (id == R.id.nav_now) {
                 // Ở ngay trang hiện tại: cuộn lên đầu
@@ -141,6 +141,10 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (id == R.id.nav_hourly) {
+                if (locId == -1) {
+                    Toast.makeText(this, "Chưa có vị trí. Không thể mở dự báo theo giờ.", Toast.LENGTH_SHORT).show();
+                    return false;
+                }
                 Intent it = new Intent(MainActivity.this, HourlyForecastActivity.class);
                 it.putExtra(HourlyForecastActivity.EXTRA_LOCATION_ID, locId);
                 it.putExtra("location_id", locId);
@@ -149,6 +153,10 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (id == R.id.nav_daily) {
+                if (locId == -1) {
+                    Toast.makeText(this, "Chưa có vị trí. Không thể mở dự báo theo ngày.", Toast.LENGTH_SHORT).show();
+                    return false;
+                }
                 Intent it = new Intent(MainActivity.this, DailyActivity.class);
                 it.putExtra(HourlyForecastActivity.EXTRA_LOCATION_ID, locId);
                 it.putExtra("location_id", locId);
@@ -158,8 +166,8 @@ public class MainActivity extends AppCompatActivity {
 
             if (id == R.id.nav_fav) {
                 startActivity(new Intent(MainActivity.this, FavoritesActivity.class));
-                    return true;
-                }
+                return true;
+            }
 
             if (id == R.id.nav_settings) {
                 startActivity(new Intent(MainActivity.this, SettingsActivity.class));
@@ -177,7 +185,14 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
+    /** Nếu auto=false → bỏ xin quyền & GPS, dùng DB. Nếu auto=true → xin quyền rồi mới load. */
     private void requestNeededPermissionsThenLoad() {
+        boolean auto = sp.getBoolean(KEY_AUTO_LOC, true);
+        if (!auto) {
+            loadWeatherWithBestEffort();
+            return;
+        }
+
         boolean fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED;
         boolean coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -193,36 +208,81 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Lấy vị trí theo Setting (LocationManager giống SettingsActivity), gọi API, lưu DB và render */
+    /** Chế độ:
+     *  - auto=false: lấy vị trí current từ DB.
+     *  - auto=true: ưu tiên GPS; nếu thất bại, fallback DB nếu có; nếu không có → báo lỗi.
+     */
     private void loadWeatherWithBestEffort() {
         io.execute(() -> {
             try {
                 boolean auto = sp.getBoolean(KEY_AUTO_LOC, true);
 
+                if (!auto) {
+                    // Dùng vị trí đang đánh dấu current trong DB
+                    long id = repo.getCurrentLocationIdOrAny();
+                    if (id == -1) {
+                        main.post(() -> Toast.makeText(
+                                MainActivity.this,
+                                "Chưa có vị trí nào. Hãy thêm trong Yêu thích hoặc bật định vị.",
+                                Toast.LENGTH_SHORT
+                        ).show());
+                        return;
+                    }
+                    currentLocationId = id;
+                    WeatherRepository.LocationInfo li = repo.getLocation(id);
+                    if (li == null) return;
+
+                    new OpenMeteoClient().fetchAndStore(
+                            li.lat, li.lon,
+                            (li.timezone != null && !li.timezone.isEmpty()) ? li.timezone : "auto",
+                            id, repo
+                    );
+                    renderFromDb(id);
+                    return;
+                }
+
+                // ==== auto=true: ưu tiên GPS ====
                 Location loc = null;
-                if (auto && isLocationEnabled() && hasLocationPermission()) {
+                if (isLocationEnabled() && hasLocationPermission()) {
                     loc = getLastKnownLocationSafe();
                     if (looksLikeBogusEmulatorLocation(loc)) loc = null;
                 }
 
-                double lat, lon;
-                String tz = "auto";
-                String name;
+                if (loc == null) {
+                    // Fallback sang DB nếu đã lưu vị trí
+                    long id = repo.getCurrentLocationIdOrAny();
+                    if (id != -1) {
+                        currentLocationId = id;
+                        renderFromDb(id); // render nhanh dữ liệu hiện có
+                        WeatherRepository.LocationInfo li = repo.getLocation(id);
+                        if (li != null) {
+                            new OpenMeteoClient().fetchAndStore(
+                                    li.lat, li.lon,
+                                    (li.timezone != null && !li.timezone.isEmpty()) ? li.timezone : "auto",
+                                    id, repo
+                            );
+                            renderFromDb(id);
+                        }
+                        return;
+                    }
 
-                if (loc != null) {
-                    lat = loc.getLatitude();
-                    lon = loc.getLongitude();
-                    name = resolveVietnamesePlaceName(lat, lon);
-                } else {
-                    // Fallback đồng bộ với Settings/Daily/Hourly → Hồ Chí Minh
-                    lat = 10.776;
-                    lon = 106.700;
-                    tz  = "Asia/Ho_Chi_Minh";
-                    name = "TP. Hồ Chí Minh";
+                    // Không có GPS và cũng không có vị trí trong DB
+                    main.post(() -> Toast.makeText(
+                            MainActivity.this,
+                            "Không thể lấy vị trí hiện tại. Hãy bật GPS/cấp quyền hoặc chọn vị trí trong Yêu thích.",
+                            Toast.LENGTH_SHORT
+                    ).show());
+                    return;
                 }
 
+                // Có GPS: tạo/cập nhật vị trí current theo tọa độ
+                double lat = loc.getLatitude();
+                double lon = loc.getLongitude();
+                String tz = "auto";
+                String name = resolveVietnamesePlaceName(lat, lon);
+
                 long locId = repo.insertOrGetLocation(
-                        name, "VN", null, null, lat, lon, tz, loc != null /*isCurrent*/
+                        name, "VN", null, null, lat, lon, tz, true /*isCurrent*/
                 );
                 currentLocationId = locId;
 
@@ -233,9 +293,9 @@ public class MainActivity extends AppCompatActivity {
                 if (currentLocationId != -1) {
                     renderFromDb(currentLocationId);
                 } else {
-                    main.post(() ->
-                            Toast.makeText(MainActivity.this, "Không thể tải dữ liệu", Toast.LENGTH_SHORT).show()
-                    );
+                    main.post(() -> Toast.makeText(
+                            MainActivity.this, "Không thể tải dữ liệu thời tiết.", Toast.LENGTH_SHORT
+                    ).show());
                 }
             }
         });
@@ -329,15 +389,10 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    /** Đảm bảo luôn có 1 locationId hợp lệ (ưu tiên current; nếu chưa có → HCM) */
-    private long resolveOrCreateDefaultLocationId() {
+    /** Chỉ trả về id hiện có; KHÔNG tạo mặc định nếu chưa có */
+    private long resolveOrGetExistingLocationId() {
         WeatherRepository r = new WeatherRepository(this);
-        long id = r.getCurrentLocationIdOrAny();
-        if (id != -1) return id;
-        return r.insertOrGetLocation(
-                "Hồ Chí Minh", "VN", null, null,
-                10.776, 106.700, "Asia/Ho_Chi_Minh", true
-        );
+        return r.getCurrentLocationIdOrAny(); // có thể là -1 nếu chưa có
     }
 
     /** Đọc DB và hiển thị theo đơn vị trong Setting */
@@ -462,7 +517,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Đảm bảo nút "Hiện tại" được highlight khi quay lại
+        // đảm bảo tab "Hiện tại" luôn được chọn khi quay lại
         if (bottomNavigationView != null) {
             bottomNavigationView.setSelectedItemId(R.id.nav_now);
         }
@@ -472,6 +527,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        // không gọi loadWeatherWithBestEffort() ở đây theo diff
     }
 
     @Override

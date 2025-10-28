@@ -8,6 +8,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.ProgressBar;
 import android.widget.LinearLayout;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -30,6 +31,10 @@ import java.util.List;
 import java.util.Locale;
 
 public class FavoritesActivity extends AppCompatActivity implements FavoriteAdapter.OnFavoriteClickListener {
+
+    // === Khớp với SettingsActivity ===
+    private static final String PREFS = "settings";
+    private static final String KEY_AUTO_LOC = "auto_location";
 
     private RecyclerView recyclerView;
     private FavoriteAdapter adapter;
@@ -121,7 +126,6 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
                 return true;
 
             } else if (itemId == R.id.nav_hourly) {
-                // ✅ Điều hướng sang trang Theo giờ
                 startActivity(new Intent(FavoritesActivity.this, HourlyForecastActivity.class));
                 finish();
                 return true;
@@ -252,11 +256,36 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         }
     }
 
+    // ==== CLICK ITEM: tắt auto, set current, sang Main, toast ====
     @Override
     public void onFavoriteClick(long locationId, String cityName) {
-        Intent resultIntent = new Intent();
-        resultIntent.putExtra("SELECTED_LOCATION_ID", locationId);
-        setResult(Activity.RESULT_OK, resultIntent);
+        // 1) Tắt vị trí tự động
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_AUTO_LOC, false)
+                .apply();
+
+        // 2) Set “vị trí hiện tại” = vị trí đã chọn
+        WeatherRepository.LocationInfo info = repository.getLocation(locationId);
+        if (info != null) {
+            repository.upsertCurrentLocation(
+                    info.lat,
+                    info.lon,
+                    (info.name != null ? info.name : cityName),
+                    (info.timezone != null && !info.timezone.isEmpty() ? info.timezone : "Asia/Ho_Chi_Minh")
+            );
+        }
+
+        // 4) Toast
+        Toast.makeText(this, "Vị trí tự động đã tắt", Toast.LENGTH_SHORT).show();
+
+        // 3) Chuyển sang trang Hiện tại (MainActivity)
+        Intent it = new Intent(FavoritesActivity.this, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        // Truyền cả 2 key cho chắc
+        it.putExtra("SELECTED_LOCATION_ID", locationId);
+        it.putExtra("location_id", locationId);
+        startActivity(it);
         finish();
     }
 
