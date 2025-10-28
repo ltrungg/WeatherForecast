@@ -47,13 +47,116 @@ public class WeatherRepository {
         }
     }
 
+    // ===========================
+    // BỔ SUNG CHO MainActivity
+    // ===========================
+
+    /** Đặt (lat,lon) làm vị trí hiện tại (current). Nếu chưa có thì chèn mới. Trả về locationId. */
+    public long upsertCurrentLocation(double lat, double lon, String name, String timezone) {
+        SQLiteDatabase w = db.writable();
+        w.beginTransaction();
+        try {
+            // Tìm location theo lat/lon
+            Long existingId = null;
+            try (Cursor c = w.rawQuery(
+                    "SELECT id FROM locations WHERE lat=? AND lon=? LIMIT 1",
+                    new String[]{String.valueOf(lat), String.valueOf(lon)})) {
+                if (c.moveToFirst()) existingId = c.getLong(0);
+            }
+
+            // Reset cờ current về 0 cho tất cả
+            ContentValues reset = new ContentValues();
+            reset.put("is_current_location", 0);
+            w.update("locations", reset, null, null);
+
+            long id;
+            ContentValues cv = new ContentValues();
+            cv.put("name", name);
+            cv.put("lat", lat);
+            cv.put("lon", lon);
+            cv.put("timezone", timezone);
+            cv.put("is_current_location", 1);
+
+            if (existingId == null) {
+                id = w.insert("locations", null, cv);
+                if (id == -1) {
+                    // fallback lấy id vừa chèn
+                    try (Cursor c = w.rawQuery(
+                            "SELECT id FROM locations WHERE lat=? AND lon=? LIMIT 1",
+                            new String[]{String.valueOf(lat), String.valueOf(lon)})) {
+                        if (c.moveToFirst()) id = c.getLong(0);
+                    }
+                }
+            } else {
+                id = existingId;
+                w.update("locations", cv, "id=?", new String[]{String.valueOf(existingId)});
+            }
+
+            w.setTransactionSuccessful();
+            return id;
+        } finally {
+            w.endTransaction();
+        }
+    }
+
+    /** Lấy id vị trí current; nếu chưa có thì trả id bất kỳ; nếu bảng rỗng thì trả -1. */
+    public long getCurrentLocationIdOrAny() {
+        SQLiteDatabase r = db.readable();
+        // Ưu tiên current
+        try (Cursor c = r.rawQuery("SELECT id FROM locations WHERE is_current_location=1 LIMIT 1", null)) {
+            if (c.moveToFirst()) return c.getLong(0);
+        }
+        // Lấy bất kỳ
+        try (Cursor c = r.rawQuery("SELECT id FROM locations ORDER BY id LIMIT 1", null)) {
+            if (c.moveToFirst()) return c.getLong(0);
+        }
+        return -1;
+    }
+
+    //    public void addFavorite(long locationId) {
+    //        SQLiteDatabase w = db.writable();
+    //        w.execSQL(
+    //                "INSERT OR IGNORE INTO favorites(location_id, sort_order) " +
+    //                        "VALUES (?, IFNULL((SELECT MAX(sort_order)+1 FROM favorites), 0))",
+    //                new Object[]{locationId}
+    //        );
+    //    }
+    public void addFavorite(long locationId, String name, String country) {
+        SQLiteDatabase w = db.writable();
+        ContentValues cv = new ContentValues();
+        cv.put("location_id", locationId);
+
+        // Tìm giá trị sort_order lớn nhất hiện tại và cộng thêm 1
+        try (Cursor c = w.rawQuery("SELECT MAX(sort_order) FROM favorites", null)) {
+            int maxSortOrder = -1;
+            if (c.moveToFirst()) {
+                maxSortOrder = c.getInt(0);
+            }
+            cv.put("sort_order", maxSortOrder + 1);
+        }
+
+        // Thêm vào bảng favorites, nếu location_id đã tồn tại thì bỏ qua (IGNORE)
+        w.insertWithOnConflict("favorites", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+    }
+
     public void addFavorite(long locationId) {
         SQLiteDatabase w = db.writable();
-        w.execSQL(
-                "INSERT OR IGNORE INTO favorites(location_id, sort_order) " +
-                        "VALUES (?, IFNULL((SELECT MAX(sort_order)+1 FROM favorites), 0))",
-                new Object[]{locationId}
-        );
+        w.beginTransaction();
+        try {
+            w.execSQL(
+                    "INSERT INTO favorites (location_id, sort_order) " +
+                            "VALUES (?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM favorites))",
+                    new Object[]{locationId}
+            );
+            w.setTransactionSuccessful();
+        } finally {
+            w.endTransaction();
+        }
+    }
+
+    public void removeFavorite(long locationId) {
+        SQLiteDatabase w = db.writable();
+        w.delete("favorites", "location_id = ?", new String[]{String.valueOf(locationId)});
     }
 
     public void upsertCurrent(long locationId, long obsTime, double tempC, Double feelsLikeC,
@@ -111,24 +214,47 @@ public class WeatherRepository {
     public List<FavoriteCard> getFavoritesCards() {
         SQLiteDatabase r = db.readable();
         List<FavoriteCard> out = new ArrayList<>();
-        try (Cursor c = r.rawQuery(
-                "SELECT sort_order, location_id, name, country, temp_c, feels_like_c, " +
-                        "humidity_pct, wind_kmh, visibility_km, condition_text, icon_code, updated_at " +
-                        "FROM v_favorites_current ORDER BY sort_order ASC, name ASC", null)) {
+        String query = "SELECT " +
+                "vfc.sort_order, vfc.location_id, vfc.name, vfc.country, vfc.temp_c, vfc.feels_like_c, " +
+                "vfc.humidity_pct, vfc.wind_kmh, vfc.visibility_km, vfc.condition_text, vfc.icon_code, vfc.updated_at, " +
+                "(SELECT temp_max_c FROM weather_daily wd WHERE wd.location_id = vfc.location_id ORDER BY wd.date_ts ASC LIMIT 1) AS maxTempC, " +
+                "(SELECT temp_min_c FROM weather_daily wd WHERE wd.location_id = vfc.location_id ORDER BY wd.date_ts ASC LIMIT 1) AS minTempC " +
+                "FROM v_favorites_current AS vfc " +
+                "ORDER BY vfc.sort_order ASC, vfc.name ASC";
+
+        try (Cursor c = r.rawQuery(query, null)) {
+            int sortOrderCol = c.getColumnIndexOrThrow("sort_order");
+            int locationIdCol = c.getColumnIndexOrThrow("location_id");
+            int nameCol = c.getColumnIndexOrThrow("name");
+            int countryCol = c.getColumnIndexOrThrow("country");
+            int tempCCol = c.getColumnIndexOrThrow("temp_c");
+            int feelsLikeCCol = c.getColumnIndexOrThrow("feels_like_c");
+            int humidityCol = c.getColumnIndexOrThrow("humidity_pct");
+            int windKmhCol = c.getColumnIndexOrThrow("wind_kmh");
+            int visibilityKmCol = c.getColumnIndexOrThrow("visibility_km");
+            int conditionCol = c.getColumnIndexOrThrow("condition_text");
+            int iconCol = c.getColumnIndexOrThrow("icon_code");
+            int updatedAtCol = c.getColumnIndexOrThrow("updated_at");
+            int maxTempCCol = c.getColumnIndexOrThrow("maxTempC"); // Cột mới
+            int minTempCCol = c.getColumnIndexOrThrow("minTempC"); // Cột mới
+
             while (c.moveToNext()) {
                 FavoriteCard f = new FavoriteCard();
-                f.sortOrder   = c.getInt(0);
-                f.locationId  = c.getLong(1);
-                f.name        = c.getString(2);
-                f.country     = c.getString(3);
-                f.tempC       = c.isNull(4) ? null : c.getDouble(4);
-                f.feelsLikeC  = c.isNull(5) ? null : c.getDouble(5);
-                f.humidity    = c.isNull(6) ? null : c.getDouble(6);
-                f.windKmh     = c.isNull(7) ? null : c.getDouble(7);
-                f.visibilityKm= c.isNull(8) ? null : c.getDouble(8);
-                f.condition   = c.getString(9);
-                f.icon        = c.getString(10);
-                f.updatedAt   = c.getLong(11);
+                f.sortOrder   = c.getInt(sortOrderCol);
+                f.locationId  = c.getLong(locationIdCol);
+                f.name        = c.getString(nameCol);
+                f.country     = c.getString(countryCol);
+                f.condition   = c.getString(conditionCol);
+                f.icon        = c.getString(iconCol);
+                f.updatedAt   = c.getLong(updatedAtCol);
+                f.tempC       = c.isNull(tempCCol) ? null : c.getDouble(tempCCol);
+                f.feelsLikeC  = c.isNull(feelsLikeCCol) ? null : c.getDouble(feelsLikeCCol);
+                f.humidity    = c.isNull(humidityCol) ? null : c.getDouble(humidityCol);
+                f.windKmh     = c.isNull(windKmhCol) ? null : c.getDouble(windKmhCol);
+                f.visibilityKm= c.isNull(visibilityKmCol) ? null : c.getDouble(visibilityKmCol);
+                f.maxTempC    = c.isNull(maxTempCCol) ? null : c.getDouble(maxTempCCol);
+                f.minTempC    = c.isNull(minTempCCol) ? null : c.getDouble(minTempCCol);
+
                 out.add(f);
             }
         }
@@ -153,20 +279,41 @@ public class WeatherRepository {
         return null;
     }
 
-    // Model phụ
-    public static class FavoriteCard {
-        public int sortOrder;
-        public long locationId;
-        public String name, country, condition, icon;
-        public Double tempC, feelsLikeC, humidity, windKmh, visibilityKm;
-        public long updatedAt;
-    }
+    public List<HourlyEntry> getHourlyForecast(long locationId) {
+        SQLiteDatabase r = db.readable();
+        List<HourlyEntry> out = new ArrayList<>();
 
-    public static class HourlyEntry {
-        public long ts;
-        public double tempC;
-        public Double humidity, windMps, windDeg, clouds, popPct, precipMm, uvi, pressure;
-        public String code, text, icon;
+        // Lấy dữ liệu hourly từ hiện tại trở đi, tối đa 48 giờ
+        long currentTime = System.currentTimeMillis() / 1000;
+        long limitTime = currentTime + (48 * 3600); // 48 giờ từ bây giờ
+
+        try (Cursor c = r.rawQuery(
+                "SELECT ts, temp_c, humidity_pct, wind_mps, wind_deg, clouds_pct, " +
+                        "pop_pct, precip_mm, uvi, pressure_hpa, condition_code, condition_text, icon_code " +
+                        "FROM weather_hourly " +
+                        "WHERE location_id = ? AND ts >= ? AND ts <= ? " +
+                        "ORDER BY ts ASC LIMIT 48",
+                new String[]{String.valueOf(locationId), String.valueOf(currentTime), String.valueOf(limitTime)})) {
+
+            while (c.moveToNext()) {
+                HourlyEntry h = new HourlyEntry();
+                h.ts = c.getLong(0);
+                h.tempC = c.getDouble(1);
+                h.humidity = c.isNull(2) ? null : c.getDouble(2);
+                h.windMps = c.isNull(3) ? null : c.getDouble(3);
+                h.windDeg = c.isNull(4) ? null : c.getDouble(4);
+                h.clouds = c.isNull(5) ? null : c.getDouble(5);
+                h.popPct = c.isNull(6) ? null : c.getDouble(6);
+                h.precipMm = c.isNull(7) ? null : c.getDouble(7);
+                h.uvi = c.isNull(8) ? null : c.getDouble(8);
+                h.pressure = c.isNull(9) ? null : c.getDouble(9);
+                h.code = c.getString(10);
+                h.text = c.getString(11);
+                h.icon = c.getString(12);
+                out.add(h);
+            }
+        }
+        return out;
     }
 
     // Lấy thời tiết hiện tại cho một location
@@ -282,11 +429,25 @@ public class WeatherRepository {
         }
     }
 
-// ===========================
-// Model phụ
-// ===========================
+    // ===========================
+    // Model phụ
+    // ===========================
+    public static class FavoriteCard {
+        public int sortOrder;
+        public long locationId;
+        public String name, country, condition, icon;
+        public Double tempC, feelsLikeC, humidity, windKmh, visibilityKm;
+        public long updatedAt;
+        public Double maxTempC;
+        public Double minTempC;
+    }
 
-
+    public static class HourlyEntry {
+        public long ts;
+        public double tempC;
+        public Double humidity, windMps, windDeg, clouds, popPct, precipMm, uvi, pressure;
+        public String code, text, icon;
+    }
 
     public static class DailyEntry {
         public long dateTs;
@@ -316,4 +477,15 @@ public class WeatherRepository {
         public String timezone;
     }
 
+    public long getOrCreateDefaultLocationId() {
+        long id = getCurrentLocationIdOrAny();
+        if (id != -1) return id;
+
+        // Tạo HCM làm mặc định và đặt current
+        return insertOrGetLocation(
+                "Hồ Chí Minh", "VN", null, null,
+                10.776, 106.700, "Asia/Ho_Chi_Minh",
+                true  // isCurrent
+        );
+    }
 }

@@ -2,4 +2,13 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="main_text_color">#2C3E50</color>
+    <color name="sub_text_color">#7F8C8D</color>
+    <color name="button_color">#3498DB</color>
+    <color name="bg_hot_card">#FFB1AD</color>
+    <color name="bg_cold_card">#ADD9FF</color>
+    <color name="hot_trend_color">#F8190B</color>
+    <color name="cold_trend_color">#3F51B5</color>
+    <color name="colorPrimary">#113355</color>
+    <color name="colorAccent">#5B7C9E</color>
 </resources>
