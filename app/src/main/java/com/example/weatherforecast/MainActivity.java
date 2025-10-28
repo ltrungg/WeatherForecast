@@ -389,28 +389,13 @@ public class MainActivity extends AppCompatActivity {
         return r.getCurrentLocationIdOrAny(); // có thể là -1 nếu chưa có
     }
 
-    /** Đọc DB và hiển thị theo đơn vị trong Setting (+fallback từ hourly nếu thiếu) */
+    /** Đọc DB và hiển thị theo đơn vị trong Setting */
     private void renderFromDb(long locationId) {
         if (locationId == -1) return;
 
         WeatherRepository.LocationInfo info = repo.getLocation(locationId);
         WeatherRepository.CurrentWeatherData cur = repo.getCurrentWeather(locationId);
-        List<WeatherRepository.DailyForecastData> daily = repo.getDailyForecast(locationId);
-
-        // ===== Fallback: nếu current thiếu humidity / visibility / precip → bù từ hourly gần nhất =====
-        if (cur != null && (cur.humidity == null || cur.visibilityKm == null || cur.precipMm == null)) {
-            List<WeatherRepository.HourlyEntry> hourly = repo.getHourlyForecast(locationId);
-            if (hourly != null && !hourly.isEmpty()) {
-                long now = System.currentTimeMillis() / 1000L; // seconds
-                WeatherRepository.HourlyEntry nearest = hourly.get(0);
-                long bestDiff = Math.abs(nearest.ts - now);
-                for (WeatherRepository.HourlyEntry h : hourly) {
-                    long d = Math.abs(h.ts - now);
-                    if (d < bestDiff) { bestDiff = d; nearest = h; }
-                }
-            }
-        }
-        // ============================================================================================
+        java.util.List<WeatherRepository.DailyForecastData> daily = repo.getDailyForecast(locationId);
 
         final WeatherRepository.CurrentWeatherData curFinal = cur;
         main.post(() -> {

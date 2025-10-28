@@ -142,6 +142,27 @@ public class OpenMeteoClient {
                             break;
                         }
                     }
+
+                    // >>> ADD: fallback tìm giờ gần nhất nếu không tìm thấy chỉ số đúng giờ now
+                    if (idxNow == -1) {
+                        try {
+                            long nowTs = System.currentTimeMillis() / 1000L;
+                            long best = Long.MAX_VALUE;
+                            int bestIdx = -1;
+                            for (int i = 0; i < b.hourly.time.size(); i++) {
+                                Long ts2 = parseIsoSec(b.hourly.time.get(i), tz);
+                                if (ts2 == null) continue;
+                                long diff = Math.abs(ts2 - nowTs);
+                                if (diff < best) { best = diff; bestIdx = i; }
+                            }
+                            idxNow = bestIdx; // có thể vẫn = -1 nếu không parse được time
+                            Log.d("API", "Hourly nearest index for current: " + idxNow);
+                        } catch (Exception ignoreNearest) {
+                            // bỏ qua nếu lỗi, không crash
+                        }
+                    }
+                    // <<< ADD END
+
                     if (idxNow != -1) {
                         // Lấy các trị số từ hourly
                         Double tempC2    = safeD(b.hourly.temperature_2m, idxNow, null);
@@ -161,7 +182,7 @@ public class OpenMeteoClient {
 
                         Long ts2 = parseIsoSec(b.hourly.time.get(idxNow), tz);
 
-                        // Ghi đè "current" bằng dữ liệu hourly tại giờ hiện tại
+                        // Ghi đè "current" bằng dữ liệu hourly tại giờ hiện tại (hoặc giờ gần nhất)
                         repo.upsertCurrent(
                                 locationId,
                                 (ts2 != null ? ts2 : System.currentTimeMillis() / 1000L),
@@ -170,7 +191,7 @@ public class OpenMeteoClient {
                                 humidity,
                                 windMps2,
                                 windDeg2,
-                                visKm,
+                                visKm,       // visibility_km
                                 pressure,
                                 null,        // uvi: chưa yêu cầu từ API hourly
                                 clouds,

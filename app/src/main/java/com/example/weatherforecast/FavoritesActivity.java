@@ -2,6 +2,7 @@ package com.example.weatherforecast;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.ImageView;
@@ -35,6 +36,7 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
     // === Khớp với SettingsActivity ===
     private static final String PREFS = "settings";
     private static final String KEY_AUTO_LOC = "auto_location";
+    private static final String KEY_TEMP_UNIT = "temp_unit"; // "C" | "F"
 
     private RecyclerView recyclerView;
     private FavoriteAdapter adapter;
@@ -195,14 +197,16 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
                 Comparator.comparing(c -> c.minTempC != null ? c.minTempC : Double.MAX_VALUE)
         );
 
-        double totalTemp = 0;
+        double totalTempC = 0;
         int count = 0;
         for (WeatherRepository.FavoriteCard card : favoriteCards) {
             if (card.tempC != null) {
-                totalTemp += card.tempC;
+                totalTempC += card.tempC;
                 count++;
             }
         }
+
+        boolean useF = "F".equals(getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_TEMP_UNIT, "C"));
 
         TextView tvHighestTitle = cardHighest.findViewById(R.id.tvSummaryTitle);
         TextView tvHighestTemp = cardHighest.findViewById(R.id.tvSummaryTemp);
@@ -210,7 +214,12 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         ImageView ivHighestIcon = cardHighest.findViewById(R.id.ivSummaryIcon);
         if (tvHighestTitle != null && tvHighestTemp != null && tvHighestCity != null) {
             tvHighestTitle.setText("Cao nhất");
-            tvHighestTemp.setText(String.format(Locale.getDefault(), "%.0f°", highest.maxTempC));
+            if (highest.maxTempC != null) {
+                double display = useF ? cToF(highest.maxTempC) : highest.maxTempC;
+                tvHighestTemp.setText(String.format(Locale.getDefault(), "%.0f°", display));
+            } else {
+                tvHighestTemp.setText("--°");
+            }
             tvHighestCity.setText(highest.name);
             ivHighestIcon.setVisibility(android.view.View.VISIBLE);
             ivHighestIcon.setImageResource(R.drawable.ic_trend_up);
@@ -224,7 +233,12 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         ImageView ivLowestIcon = cardLowest.findViewById(R.id.ivSummaryIcon);
         if (tvLowestTitle != null && tvLowestTemp != null && tvLowestCity != null) {
             tvLowestTitle.setText("Thấp nhất");
-            tvLowestTemp.setText(String.format(Locale.getDefault(), "%.0f°", lowest.minTempC));
+            if (lowest.minTempC != null) {
+                double display = useF ? cToF(lowest.minTempC) : lowest.minTempC;
+                tvLowestTemp.setText(String.format(Locale.getDefault(), "%.0f°", display));
+            } else {
+                tvLowestTemp.setText("--°");
+            }
             tvLowestCity.setText(lowest.name);
             ivLowestIcon.setVisibility(android.view.View.VISIBLE);
             ivLowestIcon.setImageResource(R.drawable.ic_trend_down);
@@ -239,7 +253,9 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         if (tvAverageTitle != null && tvAverageTemp != null && tvAverageCity != null) {
             tvAverageTitle.setText("Trung bình");
             if (count > 0) {
-                tvAverageTemp.setText(String.format(Locale.getDefault(), "%.0f°", totalTemp / count));
+                double avgC = totalTempC / count;
+                double display = useF ? cToF(avgC) : avgC;
+                tvAverageTemp.setText(String.format(Locale.getDefault(), "%.0f°", display));
             } else {
                 tvAverageTemp.setText("--°");
             }
@@ -247,6 +263,10 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
             ivAverageIcon.setImageResource(R.drawable.ic_average_temperature);
             ivAverageIcon.setVisibility(android.view.View.VISIBLE);
         }
+    }
+
+    private static double cToF(double c) {
+        return c * 9.0 / 5.0 + 32.0;
     }
 
     private void updateSubtitle() {
@@ -282,7 +302,6 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         // 3) Chuyển sang trang Hiện tại (MainActivity)
         Intent it = new Intent(FavoritesActivity.this, MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        // Truyền cả 2 key cho chắc
         it.putExtra("SELECTED_LOCATION_ID", locationId);
         it.putExtra("location_id", locationId);
         startActivity(it);

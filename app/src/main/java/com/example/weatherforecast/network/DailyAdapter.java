@@ -1,7 +1,7 @@
 package com.example.weatherforecast.network;
 
-
-
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -11,8 +11,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.weatherforecast.data.WeatherRepository;
 import com.example.weatherforecast.R;
+import com.example.weatherforecast.data.WeatherRepository;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -40,32 +40,43 @@ public class DailyAdapter extends RecyclerView.Adapter<DailyAdapter.ViewHolder> 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder h, int pos) {
         WeatherRepository.DailyForecastData d = list.get(pos);
+        Context ctx = h.itemView.getContext();
 
-        // Format date
+        // Format date label
         h.tvDate.setText(formatDayOfWeek(d.dateTs, pos));
 
-        // Weather description - translate to Vietnamese
+        // Weather description in Vietnamese
         h.tvDesc.setText(translateWeatherCondition(d.condition));
 
-        // Rain percentage (using precipitation as rain chance)
+        // Rain percentage (fallback from precipMm)
         String rainText = d.precipMm != null && d.precipMm > 0
                 ? String.format(Locale.getDefault(), "%.0f%% mưa", Math.min(d.precipMm * 10, 100))
-                : "0% mưa";
+                : (d.popPct != null ? String.format(Locale.getDefault(), "%.0f%% mưa", d.popPct) : "0% mưa");
         h.tvRain.setText(rainText);
 
-        // High temperature
-        h.tvTempHigh.setText(d.tempMaxC != null
-                ? String.format(Locale.getDefault(), "%.0f°", d.tempMaxC)
-                : "--");
+        // Units
+        SharedPreferences sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE);
+        boolean useF = "F".equals(sp.getString("temp_unit", "C"));
 
-        // Low temperature
-        h.tvTempLow.setText(d.tempMinC != null
-                ? String.format(Locale.getDefault(), "%.0f°", d.tempMinC)
-                : "--");
+        // High / Low temperature
+        if (d.tempMaxC != null) {
+            double v = useF ? (d.tempMaxC * 9 / 5.0 + 32.0) : d.tempMaxC;
+            h.tvTempHigh.setText(String.format(Locale.getDefault(), "%.0f°", v));
+        } else {
+            h.tvTempHigh.setText("--");
+        }
 
-        // Weather icon based on condition
+        if (d.tempMinC != null) {
+            double v = useF ? (d.tempMinC * 9 / 5.0 + 32.0) : d.tempMinC;
+            h.tvTempLow.setText(String.format(Locale.getDefault(), "%.0f°", v));
+        } else {
+            h.tvTempLow.setText("--");
+        }
+
+        // Icon by condition
         setWeatherIcon(h.ivWeatherIcon, d.condition);
     }
+
     @Override
     public int getItemCount() {
         android.util.Log.d("DailyAdapter", "getItemCount: " + (list == null ? 0 : list.size()));
@@ -87,22 +98,14 @@ public class DailyAdapter extends RecyclerView.Adapter<DailyAdapter.ViewHolder> 
         }
     }
 
-    private static String fmtDate(Long epochSec) {
-        if (epochSec == null) return "--";
-        return new SimpleDateFormat("EEE, d MMM", Locale.getDefault())
-                .format(new Date(epochSec * 1000L));
-    }
-
     private static String formatDayOfWeek(Long epochSec, int position) {
         if (position == 0) return "Hôm nay";
-
         if (epochSec == null) return "Ngày " + (position + 1);
 
         SimpleDateFormat sdf = new SimpleDateFormat("EEEE", Locale.getDefault());
-        String dayName = sdf.format(new Date(epochSec * 1000L));
+        String dayName = sdf.format(new Date(epochSec * 1000L)).toLowerCase(Locale.getDefault());
 
-        // Convert to Vietnamese
-        switch (dayName.toLowerCase()) {
+        switch (dayName) {
             case "monday": return "Thứ 2";
             case "tuesday": return "Thứ 3";
             case "wednesday": return "Thứ 4";
@@ -116,33 +119,18 @@ public class DailyAdapter extends RecyclerView.Adapter<DailyAdapter.ViewHolder> 
 
     private static String translateWeatherCondition(String condition) {
         if (condition == null) return "Nhiều mây";
-        
-        String lowerCondition = condition.toLowerCase();
-        
-        // Translate common weather conditions to Vietnamese
-        if (lowerCondition.contains("unknown")) {
-            return "Không xác định";
-        } else if (lowerCondition.contains("clear") || lowerCondition.contains("sunny")) {
-            return "Trời quang";
-        } else if (lowerCondition.contains("partly cloudy")) {
-            return "Ít mây";
-        } else if (lowerCondition.contains("cloudy") || lowerCondition.contains("overcast")) {
-            return "Nhiều mây";
-        } else if (lowerCondition.contains("rain") || lowerCondition.contains("drizzle")) {
-            return "Có mưa";
-        } else if (lowerCondition.contains("rain showers")) {
-            return "Mưa rào";
-        } else if (lowerCondition.contains("thunderstorm") || lowerCondition.contains("storm")) {
-            return "Dông bão";
-        } else if (lowerCondition.contains("snow")) {
-            return "Có tuyết";
-        } else if (lowerCondition.contains("fog") || lowerCondition.contains("mist")) {
-            return "Sương mù";
-        } else if (lowerCondition.contains("haze")) {
-            return "Mù mịt";
-        } else {
-            return condition; // Return original if no translation found
-        }
+        String lowerCondition = condition.toLowerCase(Locale.getDefault());
+        if (lowerCondition.contains("unknown")) return "Không xác định";
+        if (lowerCondition.contains("clear") || lowerCondition.contains("sunny")) return "Trời quang";
+        if (lowerCondition.contains("partly cloudy")) return "Ít mây";
+        if (lowerCondition.contains("cloudy") || lowerCondition.contains("overcast")) return "Nhiều mây";
+        if (lowerCondition.contains("rain showers")) return "Mưa rào";
+        if (lowerCondition.contains("rain") || lowerCondition.contains("drizzle")) return "Có mưa";
+        if (lowerCondition.contains("thunderstorm") || lowerCondition.contains("storm")) return "Dông bão";
+        if (lowerCondition.contains("snow")) return "Có tuyết";
+        if (lowerCondition.contains("fog") || lowerCondition.contains("mist")) return "Sương mù";
+        if (lowerCondition.contains("haze")) return "Mù mịt";
+        return condition;
     }
 
     private static void setWeatherIcon(ImageView imageView, String condition) {
@@ -150,16 +138,15 @@ public class DailyAdapter extends RecyclerView.Adapter<DailyAdapter.ViewHolder> 
             imageView.setImageResource(R.drawable.ic_cloud_24);
             return;
         }
-
-        String lowerCondition = condition.toLowerCase();
+        String lowerCondition = condition.toLowerCase(Locale.getDefault());
         if (lowerCondition.contains("rain") || lowerCondition.contains("mưa")) {
             imageView.setImageResource(R.drawable.ic_rain_24);
         } else if (lowerCondition.contains("sun") || lowerCondition.contains("clear") || lowerCondition.contains("nắng")) {
             imageView.setImageResource(R.drawable.ic_sunny_24);
-        } else if (lowerCondition.contains("cloud") || lowerCondition.contains("mây")) {
-            imageView.setImageResource(R.drawable.ic_cloud_24);
         } else if (lowerCondition.contains("storm") || lowerCondition.contains("thunder")) {
             imageView.setImageResource(R.drawable.ic_storm_24);
+        } else if (lowerCondition.contains("cloud") || lowerCondition.contains("mây")) {
+            imageView.setImageResource(R.drawable.ic_cloud_24);
         } else {
             imageView.setImageResource(R.drawable.ic_cloud_24);
         }

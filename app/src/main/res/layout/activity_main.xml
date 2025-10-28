@@ -28,7 +28,7 @@
             android:gravity="center"
             android:paddingTop="4dp"
             android:paddingBottom="60dp"
-            android:background="#F6FAFF">
+            android:background="@drawable/bg_sky">
 
             <!-- Header -->
             <LinearLayout
