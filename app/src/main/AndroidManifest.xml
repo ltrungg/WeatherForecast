@@ -53,5 +53,10 @@
             android:name=".AlertsActivity"
             android:exported="false"
             android:label="Cảnh báo thời tiết" />
+
+        <activity
+            android:name=".utils.HourlyForecastActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
     </application>
 </manifest>

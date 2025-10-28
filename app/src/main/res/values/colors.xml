@@ -9,4 +9,6 @@
     <color name="bg_cold_card">#ADD9FF</color>
     <color name="hot_trend_color">#F8190B</color>
     <color name="cold_trend_color">#3F51B5</color>
+    <color name="colorPrimary">#113355</color>
+    <color name="colorAccent">#5B7C9E</color>
 </resources>
