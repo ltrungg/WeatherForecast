@@ -3,19 +3,28 @@ package com.example.weatherforecast;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.*;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.CompoundButton;
+import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationManagerCompat;
@@ -27,22 +36,26 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.weatherforecast.data.AlertsRepository;
-import com.google.android.material.materialswitch.MaterialSwitch;
+import com.example.weatherforecast.data.WeatherRepository;
+import com.google.android.material.button.MaterialButton;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 public class AlertsActivity extends AppCompatActivity {
+
     private AlertsRepository repo;
+    // NEW: dùng để lấy current location id cho việc evaluate
+    private WeatherRepository weatherRepo;
 
     private LinearLayout bannerBlocked, formPanel, emptyPanel;
     private Spinner spMetric, spOp, spUnit;
     private EditText etName, etValue;
-    private Button btnCreate, btnCreatePrimary, btnCancel;
+    private MaterialButton btnCreate, btnCreatePrimary, btnCancel, btnCreateTop;
     private RecyclerView rv;
     private AlertsAdapter adapter;
 
-    // notification permission
     private ActivityResultLauncher<String> notifPermLauncher;
 
     @Override
@@ -50,6 +63,7 @@ public class AlertsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_alerts);
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.alerts_root), (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
@@ -57,8 +71,9 @@ public class AlertsActivity extends AppCompatActivity {
         });
 
         repo = new AlertsRepository(this);
+        // NEW
+        weatherRepo = new WeatherRepository(this);
 
-        // permission launcher for notifications
         notifPermLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
                 granted -> {
@@ -66,26 +81,32 @@ public class AlertsActivity extends AppCompatActivity {
                     if (!granted) Toast.makeText(this, "Bạn đã từ chối quyền thông báo", Toast.LENGTH_SHORT).show();
                 });
 
+        // Bind views
         bannerBlocked = findViewById(R.id.bannerBlocked);
-        formPanel = findViewById(R.id.formPanel);
-        emptyPanel = findViewById(R.id.emptyPanel);
+        formPanel     = findViewById(R.id.formPanel);
+        emptyPanel    = findViewById(R.id.emptyPanel);
+
         rv = findViewById(R.id.recycler);
         rv.setLayoutManager(new LinearLayoutManager(this));
         adapter = new AlertsAdapter();
         rv.setAdapter(adapter);
 
-        // Form controls
-        etName = findViewById(R.id.etName);
+        etName  = findViewById(R.id.etName);
         etValue = findViewById(R.id.etValue);
         etValue.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        spMetric = findViewById(R.id.spMetric);
-        spOp = findViewById(R.id.spOp);
-        spUnit = findViewById(R.id.spUnit);
-        btnCreate = findViewById(R.id.btnCreate);
-        btnCreatePrimary = findViewById(R.id.btnCreatePrimary);
-        btnCancel = findViewById(R.id.btnCancel);
 
-        // metric spinner
+        spMetric = findViewById(R.id.spMetric);
+        spOp     = findViewById(R.id.spOp);
+        spUnit   = findViewById(R.id.spUnit);
+
+        btnCreate        = findViewById(R.id.btnCreate);
+        btnCreatePrimary = findViewById(R.id.btnCreatePrimary);
+        btnCancel        = findViewById(R.id.btnCancel);
+        btnCreateTop     = findViewById(R.id.btnCreateTop);
+
+        findViewById(R.id.btnBack).setOnClickListener(v -> onBackPressed());
+
+        // Spinners
         ArrayAdapter<String> metricAd = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"Nhiệt độ", "Mưa", "Gió"});
@@ -93,15 +114,15 @@ public class AlertsActivity extends AppCompatActivity {
         spMetric.setSelection(0);
         spMetric.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
-                if (pos == 0) {                 // temp
+                if (pos == 0) {
                     spUnit.setAdapter(new ArrayAdapter<>(AlertsActivity.this,
                             android.R.layout.simple_spinner_dropdown_item,
                             new String[]{"°C", "°F"}));
-                } else if (pos == 1) {          // rain prob
+                } else if (pos == 1) {
                     spUnit.setAdapter(new ArrayAdapter<>(AlertsActivity.this,
                             android.R.layout.simple_spinner_dropdown_item,
                             new String[]{"%"}));
-                } else {                         // wind
+                } else {
                     spUnit.setAdapter(new ArrayAdapter<>(AlertsActivity.this,
                             android.R.layout.simple_spinner_dropdown_item,
                             new String[]{"km/h", "mph"}));
@@ -115,13 +136,10 @@ public class AlertsActivity extends AppCompatActivity {
                 new String[]{"Trên", "Dưới"}));
 
         // Buttons
+        btnCreateTop.setOnClickListener(v -> showForm(true));
         btnCreatePrimary.setOnClickListener(v -> showForm(true));
-        findViewById(R.id.btnCreateTop).setOnClickListener(v -> showForm(true));
         btnCancel.setOnClickListener(v -> showForm(false));
         btnCreate.setOnClickListener(v -> doCreate());
-
-        // back
-        findViewById(R.id.btnBack).setOnClickListener(v -> onBackPressed());
 
         refreshBanner();
         loadRules();
@@ -165,6 +183,7 @@ public class AlertsActivity extends AppCompatActivity {
 
     private void doCreate() {
         String name = etName.getText().toString().trim();
+
         String metric;
         switch (spMetric.getSelectedItemPosition()) {
             case 0: metric = "temp"; break;
@@ -180,24 +199,29 @@ public class AlertsActivity extends AppCompatActivity {
         double valueDisplay = Double.parseDouble(valStr);
         double valueBase = valueDisplay;
 
-        // ---- chuẩn hoá về đơn vị gốc để lưu vào threshold ----
-        if (metric.equals("temp")) {
+        // chuẩn hoá về đơn vị gốc để lưu
+        if ("temp".equals(metric)) {
             if ("°F".equals(unitDisplay)) valueBase = (valueDisplay - 32) * 5.0 / 9.0; // -> °C
-        } else if (metric.equals("wind")) {
+        } else if ("wind".equals(metric)) {
             if ("km/h".equals(unitDisplay)) valueBase = valueDisplay / 3.6;            // -> m/s
             else if ("mph".equals(unitDisplay)) valueBase = valueDisplay * 0.44704;    // -> m/s
-        } // rain_prob: %, không đổi
+        } // rain_prob: %
 
         AlertsRepository.AlertRule r = new AlertsRepository.AlertRule();
         r.name = name.isEmpty() ? defaultName(metric, op, valueDisplay, unitDisplay) : name;
-        r.locationId = null; // vị trí hiện tại
+        r.locationId = null;
         r.metric = metric;
         r.op = op;
-        r.threshold = valueBase;          // lưu theo đơn vị gốc
-        r.unit = unitDisplay;             // lưu đơn vị hiển thị người dùng chọn
+        r.threshold = valueBase;  // gốc
+        r.unit = unitDisplay;     // hiển thị
         r.active = true;
         r.rearmMinutes = 60;
+
         repo.insert(r);
+
+        // NEW: đánh giá ngay sau khi tạo rule để bắn thông báo nếu đủ điều kiện
+        long locId = resolveOrCreateDefaultLocationId();
+        AlertEvaluator.evaluateAndNotify(getApplicationContext(), locId);
 
         Toast.makeText(this, "Đã tạo cảnh báo", Toast.LENGTH_SHORT).show();
         showForm(false);
@@ -206,50 +230,119 @@ public class AlertsActivity extends AppCompatActivity {
     }
 
     private static String defaultName(String metric, String op, double valueDisplay, String unitDisplay) {
-        String metricName = metric.equals("temp") ? "Nhiệt độ" :
-                metric.equals("wind") ? "Gió" : "Mưa";
+        String metricName = metric.equals("temp") ? "Nhiệt độ"
+                : metric.equals("wind") ? "Gió" : "Mưa";
         return String.format(Locale.getDefault(),
                 "%s %s %.1f%s",
                 metricName, op.equals(">") ? "trên" : "dưới", valueDisplay, unitDisplay);
     }
 
+    // === LẤY location id như các màn khác ===
+    private long resolveOrCreateDefaultLocationId() {
+        long id = weatherRepo.getCurrentLocationIdOrAny();
+        if (id != -1) return id;
+        return weatherRepo.insertOrGetLocation(
+                "Hồ Chí Minh", "VN", null, null,
+                10.776, 106.700, "Asia/Ho_Chi_Minh", true
+        );
+    }
+
+    private static double cToF(double c) { return c * 9.0 / 5.0 + 32.0; }
+    private static double msToKmh(double ms) { return ms * 3.6; }
+    private static double msToMph(double ms) { return ms / 0.44704; }
+
+    /** Hiển thị threshold đúng đơn vị người dùng đã chọn */
+    private static String formatSub(AlertsRepository.AlertRule a) {
+        String metricLabel;
+        switch (a.metric) {
+            case "temp":      metricLabel = "Nhiệt độ"; break;
+            case "wind":      metricLabel = "Gió"; break;
+            case "rain_prob": metricLabel = "Mưa"; break;
+            case "feels_like":metricLabel = "Cảm giác"; break;
+            case "uvi":       metricLabel = "UVI"; break;
+            case "clouds":    metricLabel = "Mây"; break;
+            default:          metricLabel = a.metric;
+        }
+        double displayVal = a.threshold;
+        if ("temp".equals(a.metric)) {
+            if ("°F".equals(a.unit)) displayVal = cToF(a.threshold);
+        } else if ("wind".equals(a.metric)) {
+            if ("km/h".equals(a.unit)) displayVal = msToKmh(a.threshold);
+            else if ("mph".equals(a.unit)) displayVal = msToMph(a.threshold);
+        }
+        String unit = a.unit == null ? "" : a.unit;
+        return String.format(Locale.getDefault(), "%s %s %.1f%s", metricLabel, a.op, displayVal, unit);
+    }
+
     // ===== RecyclerView =====
     private class AlertsAdapter extends RecyclerView.Adapter<AlertsVH> {
         private final List<AlertsRepository.AlertRule> data = new ArrayList<>();
-        void submit(List<AlertsRepository.AlertRule> items) { data.clear(); if (items != null) data.addAll(items); notifyDataSetChanged(); }
-        @Override public AlertsVH onCreateViewHolder(ViewGroup p, int vt) {
-            return new AlertsVH(getLayoutInflater().inflate(R.layout.item_alert_rule, p, false));
+
+        void submit(List<AlertsRepository.AlertRule> items) {
+            data.clear();
+            if (items != null) data.addAll(items);
+            notifyDataSetChanged();
         }
-        @Override public void onBindViewHolder(AlertsVH h, int i) { h.bind(data.get(i)); }
-        @Override public int getItemCount() { return data.size(); }
+
+        @NonNull
+        @Override
+        public AlertsVH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View item = LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.item_alert_rule, parent, false);
+            return new AlertsVH(item);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull AlertsVH holder, int position) {
+            holder.bind(data.get(position));
+        }
+
+        @Override
+        public int getItemCount() { return data.size(); }
     }
+
     private class AlertsVH extends RecyclerView.ViewHolder {
         TextView tvTitle, tvSub;
-        MaterialSwitch swActive;
+        CompoundButton swActive;
         ImageButton btnDel;
+
         @SuppressLint("WrongViewCast")
         AlertsVH(View v) {
             super(v);
             tvTitle = v.findViewById(R.id.tvTitle);
             tvSub   = v.findViewById(R.id.tvSub);
-            swActive= v.findViewById(R.id.swActive);
+
+            View swView = v.findViewById(R.id.swActive);
+            if (swView instanceof CompoundButton) {
+                swActive = (CompoundButton) swView;
+            }
             btnDel  = v.findViewById(R.id.btnDel);
         }
+
         void bind(AlertsRepository.AlertRule a) {
             tvTitle.setText(a.name);
-            // hiển thị theo đơn vị người dùng đã chọn khi tạo rule
-            tvSub.setText(a.metric + " " + a.op + " " + a.threshold + (a.unit == null ? "" : a.unit));
-            swActive.setChecked(a.active);
-            swActive.setOnCheckedChangeListener((b, is) -> repo.setActive(a.id, is));
+            tvSub.setText(formatSub(a));
+
+            if (swActive != null) {
+                swActive.setOnCheckedChangeListener(null);
+                swActive.setChecked(a.active);
+                swActive.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                    repo.setActive(a.id, isChecked);
+                    // NEW: nếu bật lại rule → evaluate ngay
+                    if (isChecked) {
+                        long locId = resolveOrCreateDefaultLocationId();
+                        AlertEvaluator.evaluateAndNotify(getApplicationContext(), locId);
+                    }
+                });
+            }
+
             btnDel.setOnClickListener(v -> {
-                int currentPosition = getAdapterPosition();
-                if (currentPosition != RecyclerView.NO_POSITION) {
+                int pos = getAdapterPosition();
+                if (pos != RecyclerView.NO_POSITION) {
                     repo.delete(a.id);
-                    // Sửa ở đây: Thay thế loadRules()
-                    adapter.data.remove(currentPosition);
-                    adapter.notifyItemRemoved(currentPosition);
-                    adapter.notifyItemRangeChanged(currentPosition, adapter.data.size());
-                    // Cập nhật lại emptyPanel
+                    adapter.data.remove(pos);
+                    adapter.notifyItemRemoved(pos);
+                    adapter.notifyItemRangeChanged(pos, adapter.data.size());
                     emptyPanel.setVisibility(adapter.data.isEmpty() ? View.VISIBLE : View.GONE);
                 }
             });

@@ -28,7 +28,7 @@ import com.google.android.material.button.MaterialButton;
 
 import java.util.ArrayList;
 import java.util.List;
-
+import com.example.weatherforecast.AlertEvaluator;
 public class DailyActivity extends AppCompatActivity {
 
     // === Pref keys (khớp Settings/Main) ===
@@ -236,7 +236,7 @@ public class DailyActivity extends AppCompatActivity {
                 }
 
                 new OpenMeteoClient().fetchAndStore(lat, lon, timezone, locationId, repo);
-
+                AlertEvaluator.evaluateAndNotify(getApplicationContext(), locationId);
                 List<WeatherRepository.DailyForecastData> list = repo.getDailyForecast(locationId);
 
                 runOnUiThread(() -> {

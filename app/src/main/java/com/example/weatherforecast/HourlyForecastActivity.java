@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import com.example.weatherforecast.AlertEvaluator;
 
 public class HourlyForecastActivity extends AppCompatActivity {
 
@@ -190,6 +191,7 @@ public class HourlyForecastActivity extends AppCompatActivity {
                         locationId,
                         repo
                 );
+                AlertEvaluator.evaluateAndNotify(getApplicationContext(), locationId);
             }
             runOnUiThread(this::loadHourly);
         }).start();

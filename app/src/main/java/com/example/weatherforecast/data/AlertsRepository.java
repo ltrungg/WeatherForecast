@@ -12,7 +12,10 @@ import java.util.List;
 public class AlertsRepository {
     private final WeatherDb db;
 
-    public AlertsRepository(Context ctx) { this.db = WeatherDb.get(ctx); }
+    public AlertsRepository(Context ctx) {
+        this.db = WeatherDb.get(ctx);
+        ensureSchema(); // <<< Thêm: tự kiểm tra & bổ sung cột còn thiếu
+    }
 
     // ===== Model =====
     public static class AlertRule {
@@ -27,6 +30,32 @@ public class AlertsRepository {
         public int rearmMinutes;
     }
 
+    // --- Auto-migration: thêm cột nếu thiếu ---
+    private void ensureSchema() {
+        SQLiteDatabase w = db.writable();
+        // alert_rules.threshold_unit
+        if (!hasColumn(w, "alert_rules", "threshold_unit")) {
+            w.execSQL("ALTER TABLE alert_rules ADD COLUMN threshold_unit TEXT");
+        }
+        // alert_events.fired_at
+        if (!hasColumn(w, "alert_events", "fired_at")) {
+            w.execSQL("ALTER TABLE alert_events ADD COLUMN fired_at INTEGER");
+        }
+    }
+
+    private boolean hasColumn(SQLiteDatabase db, String table, String column) {
+        Cursor c = db.rawQuery("PRAGMA table_info(" + table + ")", null);
+        try {
+            while (c.moveToNext()) {
+                String name = c.getString(c.getColumnIndexOrThrow("name"));
+                if (column.equalsIgnoreCase(name)) return true;
+            }
+            return false;
+        } finally {
+            c.close();
+        }
+    }
+
     // ===== CRUD =====
     public long insert(AlertRule r) {
         SQLiteDatabase w = db.writable();
@@ -36,7 +65,7 @@ public class AlertsRepository {
         cv.put("metric", r.metric);
         cv.put("op", r.op);
         cv.put("threshold", r.threshold);
-        cv.put("threshold_unit", r.unit);
+        cv.put("threshold_unit", r.unit); // có thể null
         cv.put("active", r.active ? 1 : 0);
         cv.put("rearm_minutes", r.rearmMinutes);
         return w.insertOrThrow("alert_rules", null, cv);
@@ -44,6 +73,7 @@ public class AlertsRepository {
 
     public List<AlertRule> listAll() {
         ArrayList<AlertRule> list = new ArrayList<>();
+        // SELECT an toàn dù threshold_unit có thể chưa có ở DB cũ (ensureSchema đã thêm)
         try (Cursor c = db.readable().rawQuery(
                 "SELECT id,name,location_id,metric,op,threshold,threshold_unit,active,rearm_minutes " +
                         "FROM alert_rules ORDER BY id DESC", null)) {
@@ -55,7 +85,7 @@ public class AlertsRepository {
                 a.metric = c.getString(3);
                 a.op = c.getString(4);
                 a.threshold = c.getDouble(5);
-                a.unit = c.getString(6);
+                a.unit = c.isNull(6) ? null : c.getString(6);
                 a.active = c.getInt(7) != 0;
                 a.rearmMinutes = c.getInt(8);
                 list.add(a);
@@ -89,6 +119,7 @@ public class AlertsRepository {
         cv.put("alert_id", alertId);
         if (observed != null) cv.put("observed_value", observed);
         cv.put("channel", channel);
+        cv.put("fired_at", System.currentTimeMillis() / 1000L); // <<< đảm bảo có timestamp
         db.writable().insert("alert_events", null, cv);
     }
 }

@@ -3,9 +3,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
+    android:layout_marginVertical="6dp"
+    android:layout_marginHorizontal="12dp"
+    app:cardCornerRadius="14dp"
     app:cardUseCompatPadding="true"
-    app:cardCornerRadius="16dp"
     app:strokeColor="#E2EBF5"
     app:strokeWidth="1dp">
 
@@ -13,43 +14,48 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="12dp">
-
-        <ImageView
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:src="@drawable/ic_bell_24"
-            android:tint="#6C84A3"
-            android:layout_marginEnd="10dp"/>
+        android:padding="14dp"
+        android:gravity="center_vertical">
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical">
+
             <TextView
                 android:id="@+id/tvTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tên cảnh báo"
                 android:textStyle="bold"
                 android:textSize="16sp"
-                android:textColor="#112433"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
+                android:textColor="#112433" />
+
             <TextView
                 android:id="@+id/tvSub"
-                android:textColor="#6C84A3"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
+                android:layout_height="wrap_content"
+                android:text="Nhiệt độ > 35.0°C"
+                android:textColor="#6C84A3"
+                android:layout_marginTop="2dp"/>
         </LinearLayout>
 
-        <Switch
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/swActive"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            app:useMaterialThemeColors="true"
+            android:checked="true"
+            android:layout_marginEnd="8dp"/>
 
         <ImageButton
             android:id="@+id/btnDel"
-            android:src="@android:drawable/ic_menu_delete"
-            android:background="@android:color/transparent"
-            android:contentDescription="Xóa"/>
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/app_name"
+            app:srcCompat="@drawable/ic_delete_24"
+            app:tint="#9AA9BC"/>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
