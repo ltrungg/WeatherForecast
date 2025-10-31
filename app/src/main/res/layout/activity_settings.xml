@@ -191,69 +191,6 @@
                     android:src="@drawable/ic_chevron_right_24"/>
             </LinearLayout>
 
-            <!-- ===== CÔNG CỤ THỜI TIẾT ===== -->
-            <TextView
-                style="@style/TextAppearance.Material3.LabelSmall"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="CÔNG CỤ THỜI TIẾT"
-                android:textAllCaps="true"
-                android:textColor="#8AA0B6"
-                android:layout_marginTop="18dp"
-                android:layout_marginBottom="8dp"/>
-
-            <!-- Bản đồ thời tiết -->
-            <LinearLayout
-                android:id="@+id/rowMap"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="14dp"
-                android:clickable="true"
-                android:focusable="true">
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_cloud_24"/>
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Bản đồ thời tiết"
-                    android:textSize="16sp"
-                    android:layout_marginStart="12dp"/>
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_chevron_right_24"/>
-            </LinearLayout>
-
-            <!-- Radar thời tiết -->
-            <LinearLayout
-                android:id="@+id/rowRadar"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:gravity="center_vertical"
-                android:paddingHorizontal="14dp"
-                android:clickable="true"
-                android:focusable="true">
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_cloud_24"/>
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Radar thời tiết"
-                    android:textSize="16sp"
-                    android:layout_marginStart="12dp"/>
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_chevron_right_24"/>
-            </LinearLayout>
-
             <!-- ===== THÔNG TIN ===== -->
             <TextView
                 style="@style/TextAppearance.Material3.LabelSmall"

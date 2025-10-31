@@ -1,33 +1,46 @@
 package com.example.weatherforecast.network;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.view.animation.LayoutAnimationController;
-import android.widget.TextView;
 import android.widget.ScrollView;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.example.weatherforecast.FavoritesActivity;
+import com.example.weatherforecast.HourlyForecastActivity;
+import com.example.weatherforecast.MainActivity;
 import com.example.weatherforecast.R;
+import com.example.weatherforecast.SettingsActivity;
+import com.example.weatherforecast.data.WeatherRepository;
+import com.example.weatherforecast.utils.Units;
+import com.github.mikephil.charting.charts.BarChart;
+import com.github.mikephil.charting.charts.LineChart;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
-import com.github.mikephil.charting.charts.LineChart;
-import com.github.mikephil.charting.charts.BarChart;
 
-import com.example.weatherforecast.data.WeatherRepository;
+import java.util.ArrayList;
 import java.util.List;
-
+import com.example.weatherforecast.AlertEvaluator;
 public class DailyActivity extends AppCompatActivity {
+
+    // === Pref keys (khớp Settings/Main) ===
+    private static final String PREFS = "settings";
+    private static final String KEY_TEMP_UNIT = "temp_unit";     // "C" | "F"
+    private static final String KEY_WIND_UNIT = "wind_unit";     // "kmh" | "mph"
 
     private WeatherRepository repo;
     private DailyAdapter adapter;
     private BottomNavigationView bottomNav;
 
-    // UI components for toggle functionality
+    // UI
     private MaterialButton btnList;
     private MaterialButton btnChart;
     private RecyclerView recyclerDaily;
@@ -35,10 +48,25 @@ public class DailyActivity extends AppCompatActivity {
     private LineChart temperatureChart;
     private BarChart precipitationChart;
     private TextView tvTitle;
+    private TextView tvLocation;
 
-    // State management
-    private boolean isChartView = false;
+    // State
     private List<WeatherRepository.DailyForecastData> currentData;
+    private long locationId = -1L;
+
+    // Prefs
+    private SharedPreferences sp;
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefListener =
+            (prefs, key) -> {
+                if (KEY_TEMP_UNIT.equals(key) || KEY_WIND_UNIT.equals(key)) {
+                    if (adapter != null) {
+                        adapter.setData(currentData);
+                    }
+                    if (chartContainer != null && chartContainer.getVisibility() == View.VISIBLE) {
+                        renderCharts();
+                    }
+                }
+            };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,188 +74,207 @@ public class DailyActivity extends AppCompatActivity {
         Log.d("DailyActivity", "DailyActivity onCreate started");
         setContentView(R.layout.daily_weather);
 
+        sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        sp.registerOnSharedPreferenceChangeListener(prefListener);
+
         final androidx.constraintlayout.widget.ConstraintLayout root = findViewById(R.id.rootDaily);
 
-        // Initialize UI components
+        // Init UI
         recyclerDaily = findViewById(R.id.recyclerDaily);
         recyclerDaily.setLayoutManager(new LinearLayoutManager(this));
         adapter = new DailyAdapter();
         recyclerDaily.setAdapter(adapter);
 
-        // Initialize chart components
         chartContainer = findViewById(R.id.chartContainer);
         temperatureChart = findViewById(R.id.temperatureChart);
         precipitationChart = findViewById(R.id.precipitationChart);
         btnList = findViewById(R.id.btnList);
         btnChart = findViewById(R.id.btnChart);
         tvTitle = findViewById(R.id.tvTitle);
+        tvLocation = findViewById(R.id.tvLocation);
 
-        // Setup toggle buttons
         setupToggleButtons();
 
         bottomNav = findViewById(R.id.bottomNav);
         setupBottomNavigation();
 
-        // Set location name
-        TextView tvLocation = findViewById(R.id.tvLocation);
-        tvLocation.setText("Hồ Chí Minh");
-
         repo = new WeatherRepository(this);
 
-        // Load từ database
-        final long locationId = getIntent().getLongExtra("location_id", -1) == -1 ? 1 : getIntent().getLongExtra("location_id", -1);
-        if (locationId == -1) {
-            Log.e("DailyActivity", "Missing location_id! Using default location.");
-        }
+        // Nhận cả 2 key; nếu không có → tạo/lấy mặc định
+        locationId = getIntent().getLongExtra("location_id", -1L);
+        if (locationId == -1L)
+            locationId = getIntent().getLongExtra(HourlyForecastActivity.EXTRA_LOCATION_ID, -1L);
+        if (locationId == -1L)
+            locationId = resolveOrCreateDefaultLocationId();
 
+        // Load + render
+        loadAndRenderDaily(root);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (bottomNav != null) bottomNav.setSelectedItemId(R.id.nav_daily);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (sp != null) sp.unregisterOnSharedPreferenceChangeListener(prefListener);
+    }
+
+    private void setupBottomNavigation() {
+        bottomNav.setOnItemSelectedListener(item -> {
+            int itemId = item.getItemId();
+            long locId = resolveOrCreateDefaultLocationId();
+
+            if (itemId == R.id.nav_now) {
+                startActivity(new Intent(this, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                finish();
+                return true;
+
+            } else if (itemId == R.id.nav_hourly) {
+                Intent it = new Intent(this, HourlyForecastActivity.class);
+                it.putExtra(HourlyForecastActivity.EXTRA_LOCATION_ID, locId);
+                it.putExtra("location_id", locId);
+                startActivity(it);
+                finish();
+                return true;
+
+            } else if (itemId == R.id.nav_daily) {
+                return true;
+
+            } else if (itemId == R.id.nav_fav) {
+                startActivity(new Intent(this, FavoritesActivity.class));
+                finish();
+                return true;
+
+            } else if (itemId == R.id.nav_settings) {
+                startActivity(new Intent(this, SettingsActivity.class));
+                finish();
+                return true;
+            }
+            return false;
+        });
+
+        bottomNav.post(() -> bottomNav.setSelectedItemId(R.id.nav_daily));
+    }
+
+    private long resolveOrCreateDefaultLocationId() {
+        WeatherRepository r = new WeatherRepository(this);
+        long id = r.getCurrentLocationIdOrAny();
+        if (id != -1) return id;
+        return r.insertOrGetLocation(
+                "Hồ Chí Minh", "VN", null, null,
+                10.776, 106.700, "Asia/Ho_Chi_Minh", true
+        );
+    }
+
+    private void setupToggleButtons() {
+        btnList.setOnClickListener(v -> switchToListView());
+        btnChart.setOnClickListener(v -> switchToChartView());
+        switchToListView();
+    }
+
+    private void switchToListView() {
+        recyclerDaily.setVisibility(View.VISIBLE);
+        chartContainer.setVisibility(View.GONE);
+        tvTitle.setText("Dự báo thời tiết trong 7 ngày");
+
+        btnList.setBackgroundResource(R.drawable.toggle_button_selected);
+        btnList.setTextColor(Color.parseColor("#FFFFFF"));
+        btnChart.setBackgroundResource(R.drawable.toggle_button_unselected);
+        btnChart.setTextColor(Color.parseColor("#666666"));
+
+        LayoutAnimationController animation =
+                android.view.animation.AnimationUtils.loadLayoutAnimation(this, R.anim.layout_animation_fall_down);
+        recyclerDaily.setLayoutAnimation(animation);
+        recyclerDaily.scheduleLayoutAnimation();
+    }
+
+    private void switchToChartView() {
+        recyclerDaily.setVisibility(View.GONE);
+        chartContainer.setVisibility(View.VISIBLE);
+        tvTitle.setText("Dự báo thời tiết trong 7 ngày");
+
+        btnChart.setBackgroundResource(R.drawable.toggle_button_selected);
+        btnChart.setTextColor(Color.parseColor("#FFFFFF"));
+        btnList.setBackgroundResource(R.drawable.toggle_button_unselected);
+        btnList.setTextColor(Color.parseColor("#666666"));
+
+        renderCharts();
+    }
+
+    private void renderCharts() {
+        if (currentData == null || currentData.isEmpty()) return;
+        boolean useF = Units.useF(this);
+
+        // Tạo bản sao dữ liệu theo đơn vị mong muốn (giữ nguyên chữ ký ChartHelper cũ: 2 tham số)
+        List<WeatherRepository.DailyForecastData> chartData =
+                useF ? cloneDailyAsF(currentData) : currentData;
+
+        ChartHelper.setupTemperatureChart(temperatureChart, chartData);
+        ChartHelper.setupPrecipitationChart(precipitationChart, currentData);
+    }
+
+    /** Load API + DB rồi render lần đầu (hoặc refresh đầy đủ) */
+    private void loadAndRenderDaily(View rootBg) {
         new Thread(() -> {
             try {
                 Log.d("DailyActivity", "Loading forecast for locationId: " + locationId);
 
-                // Lấy thông tin location (lat/lon/timezone)
                 WeatherRepository.LocationInfo info = repo.getLocation(locationId);
                 double lat = info != null ? info.lat : 10.776;
                 double lon = info != null ? info.lon : 106.700;
                 String timezone = (info != null && info.timezone != null && !info.timezone.isEmpty())
                         ? info.timezone : "Asia/Ho_Chi_Minh";
 
-                // Cập nhật tên địa điểm nếu có trong DB
                 if (info != null && info.name != null) {
-                    runOnUiThread(() -> tvLocation.setText(info.name));
+                    String name = info.name;
+                    runOnUiThread(() -> tvLocation.setText(name));
                 }
 
-                // Gọi Open-Meteo và lưu DB
-                Log.d("DailyActivity", "Calling OpenMeteo for lat=" + lat + ", lon=" + lon + ", tz=" + timezone);
                 new OpenMeteoClient().fetchAndStore(lat, lon, timezone, locationId, repo);
-                Log.d("DailyActivity", "OpenMeteo fetch completed");
-
-                // Đọc lại DB và hiển thị
+                AlertEvaluator.evaluateAndNotify(getApplicationContext(), locationId);
                 List<WeatherRepository.DailyForecastData> list = repo.getDailyForecast(locationId);
 
-                Log.d("DailyActivity", "Forecast loaded from DB, size=" + (list != null ? list.size() : 0));
                 runOnUiThread(() -> {
-                    // Store data for charts
                     currentData = list;
                     adapter.setData(list);
-                    // Sử dụng nền bg_sky cố định cho tất cả trường hợp
-                    root.setBackgroundResource(R.drawable.bg_sky);
+                    rootBg.setBackgroundResource(R.drawable.bg_sky);
+                    if (chartContainer.getVisibility() == View.VISIBLE) {
+                        renderCharts();
+                    }
                 });
             } catch (Exception e) {
                 Log.e("DailyActivity", "Error loading forecast", e);
-                runOnUiThread(() -> Log.e("DailyActivity", "Failed to load forecast: " + e.getMessage()));
             }
         }).start();
-
-
-//        new Thread(() -> {
-//            try {
-//                var list = repo.getDailyForecast(locationId);
-//                Log.d("DailyActivity", "Forecast size = " + (list == null ? "null" : list.size()));
-//
-//                runOnUiThread(() -> {
-//                    if (list == null || list.isEmpty()) {
-//                        Log.w("DailyActivity", "No forecast data found for locationId=" + locationId);
-//                    }
-//                    adapter.setData(list);
-//                });
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
-//        }).start();
-
-
-
     }
 
+    // ===== Helpers chuyển đơn vị cho biểu đồ ngày =====
+    private static double cToF(double c) { return c * 9 / 5.0 + 32.0; }
 
-    private void setupBottomNavigation() {
-        bottomNav.setOnItemSelectedListener(item -> {
-            int itemId = item.getItemId();
-            if (itemId == R.id.nav_now) {
-                // Navigate back to MainActivity
-                Log.d("DailyActivity", "Navigating back to MainActivity");
-                Intent intent = new Intent(this, com.example.weatherforecast.MainActivity.class);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(intent);
-                return true;
-            } else if (itemId == R.id.nav_daily) {
-                // Đang ở trang 7 ngày, đánh dấu đã chọn
-                return true;
-            } else if (itemId == R.id.nav_settings) {
-                // Navigate to SettingsActivity
-                Log.d("DailyActivity", "Navigating to SettingsActivity");
-                Intent intent = new Intent(this, com.example.weatherforecast.SettingsActivity.class);
-                startActivity(intent);
-                return true;
-            }
-
-            return false;
-        });
-
-        // Đánh dấu "7 ngày" đã chọn khi mở màn hình này
-        bottomNav.post(() -> bottomNav.setSelectedItemId(R.id.nav_daily));
-    }
-
-    private void setupToggleButtons() {
-        btnList.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                switchToListView();
-            }
-
-        });
-
-        btnChart.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                switchToChartView();
-            }
-        });
-
-        // Set initial state
-        switchToListView();
-    }
-
-    private void switchToListView() {
-        isChartView = false;
-
-        // Update UI
-        recyclerDaily.setVisibility(View.VISIBLE);
-        chartContainer.setVisibility(View.GONE);
-        tvTitle.setText("Dự báo thời tiết trong 7 ngày");
-
-        // Update button states
-        btnList.setBackgroundResource(R.drawable.toggle_button_selected);
-        btnList.setTextColor(Color.parseColor("#FFFFFF"));
-        btnChart.setBackgroundResource(R.drawable.toggle_button_unselected);
-        btnChart.setTextColor(Color.parseColor("#666666"));
-
-        // Thêm hiệu ứng cho danh sách
-        LayoutAnimationController animation = android.view.animation.AnimationUtils.loadLayoutAnimation(
-                this, R.anim.layout_animation_fall_down);
-        recyclerDaily.setLayoutAnimation(animation);
-        recyclerDaily.scheduleLayoutAnimation();
-    }
-
-    private void switchToChartView() {
-        isChartView = true;
-
-        // Update UI
-        recyclerDaily.setVisibility(View.GONE);
-        chartContainer.setVisibility(View.VISIBLE);
-        tvTitle.setText("Dự báo thời tiết trong 7 ngày");
-
-        // Update button states
-        btnChart.setBackgroundResource(R.drawable.toggle_button_selected);
-        btnChart.setTextColor(Color.parseColor("#FFFFFF"));
-        btnList.setBackgroundResource(R.drawable.toggle_button_unselected);
-        btnList.setTextColor(Color.parseColor("#666666"));
-
-        // Setup charts with current data
-        if (currentData != null && !currentData.isEmpty()) {
-            ChartHelper.setupTemperatureChart(temperatureChart, currentData);
-            ChartHelper.setupPrecipitationChart(precipitationChart, currentData);
+    private List<WeatherRepository.DailyForecastData> cloneDailyAsF(List<WeatherRepository.DailyForecastData> src) {
+        List<WeatherRepository.DailyForecastData> out = new ArrayList<>(src.size());
+        for (WeatherRepository.DailyForecastData d : src) {
+            WeatherRepository.DailyForecastData x = new WeatherRepository.DailyForecastData();
+            x.dateTs   = d.dateTs;
+            x.tempMinC = d.tempMinC == null ? null : cToF(d.tempMinC);
+            x.tempMaxC = d.tempMaxC == null ? null : cToF(d.tempMaxC);
+            x.popPct   = d.popPct;
+            x.precipMm = d.precipMm;
+            x.windMps  = d.windMps;
+            x.windDeg  = d.windDeg;
+            x.windKmh  = d.windKmh;
+            x.sunriseTs = d.sunriseTs;
+            x.sunsetTs  = d.sunsetTs;
+            x.conditionCode = d.conditionCode;
+            x.condition     = d.condition;
+            x.icon          = d.icon;
+            out.add(x);
         }
+        return out;
     }
 }
-
