@@ -416,20 +416,6 @@ public class MainActivity extends AppCompatActivity {
         WeatherRepository.CurrentWeatherData cur = repo.getCurrentWeather(locationId);
         java.util.List<WeatherRepository.DailyForecastData> daily = repo.getDailyForecast(locationId);
 
-        // ===== Fallback: nếu current thiếu humidity / visibility / precip → bù từ hourly gần nhất =====
-        if (cur != null && (cur.humidity == null || cur.visibilityKm == null || cur.precipMm == null)) {
-            List<WeatherRepository.HourlyEntry> hourly = repo.getHourlyForecast(locationId);
-            if (hourly != null && !hourly.isEmpty()) {
-                long now = System.currentTimeMillis() / 1000L; // seconds
-                WeatherRepository.HourlyEntry nearest = hourly.get(0);
-                long bestDiff = Math.abs(nearest.ts - now);
-                for (WeatherRepository.HourlyEntry h : hourly) {
-                    long d = Math.abs(h.ts - now);
-                    if (d < bestDiff) { bestDiff = d; nearest = h; }
-                }
-            }
-        }
-
         final WeatherRepository.CurrentWeatherData curFinal = cur;
         main.post(() -> {
             // Tên địa điểm
