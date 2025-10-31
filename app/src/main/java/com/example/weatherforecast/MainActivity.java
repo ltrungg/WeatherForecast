@@ -1,5 +1,5 @@
 package com.example.weatherforecast;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
@@ -117,9 +117,7 @@ public class MainActivity extends AppCompatActivity {
 
         tvSunriseTime = findViewById(R.id.tvSunriseTime);
         tvSunsetTime = findViewById(R.id.tvSunsetTime);
-        FloatingActionButton fabChat = findViewById(R.id.fab_chat);
-        fabChat.setOnClickListener(v ->
-                startActivity(new Intent(MainActivity.this, AiChatActivity.class)));
+
         bottomNavigationView = findViewById(R.id.bottomNavigation);
     }
 

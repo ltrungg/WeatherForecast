@@ -1,5 +1,4 @@
 <resources>
     <string name="app_name">WeatherForecast</string>
     <string name="delete_action_description">Xóa cảnh báo</string>
-    <string name="google_ai_key">AIzaSyAr5-OO_3ZGQCoE4zJ24DBAHiTucXDkIsE</string>
 </resources>
