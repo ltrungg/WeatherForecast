@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvWindValue, tvHumidityValue, tvVisibilityValue, tvPressureValue;
     private TextView tvSunriseTime, tvSunsetTime;
     private ScrollView scrollMain;
+    private com.google.android.material.floatingactionbutton.FloatingActionButton fabChat;
     private BottomNavigationView bottomNavigationView;
 
     // ===== Perms / threading =====
@@ -88,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
         initStaticHeader();
         initBottomNav();
         initPermissionsLaunchers();
+        initChatbotButton();
 
         requestNeededPermissionsThenLoad();
 
@@ -119,6 +121,7 @@ public class MainActivity extends AppCompatActivity {
         tvSunsetTime = findViewById(R.id.tvSunsetTime);
 
         bottomNavigationView = findViewById(R.id.bottomNavigation);
+        fabChat = findViewById(R.id.fabChat);
     }
 
     private void initStaticHeader() {
@@ -174,6 +177,22 @@ public class MainActivity extends AppCompatActivity {
             }
 
             return false;
+        });
+    }
+
+    private void initChatbotButton() {
+        fabChat.setOnClickListener(v -> {
+            // Lấy id của vị trí hiện tại để gửi sang cho ChatbotActivity
+            long currentLocId = resolveOrGetExistingLocationId();
+            if (currentLocId == -1) {
+                Toast.makeText(this, "Vui lòng chọn hoặc thêm một vị trí trước khi hỏi AI.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            Intent intent = new Intent(MainActivity.this, ChatbotActivity.class);
+            // Gửi ID vị trí sang, Chatbot sẽ dùng nó để lấy dữ liệu thời tiết
+            intent.putExtra("location_id", currentLocId);
+            startActivity(intent);
         });
     }
 

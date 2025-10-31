@@ -46,6 +46,10 @@
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="Cài đặt" />
+        <activity
+            android:name=".ChatbotActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"/>
 
         <activity
             android:name=".AlertsActivity"

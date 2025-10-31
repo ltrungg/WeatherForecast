@@ -302,6 +302,7 @@ public class FavoritesActivity extends AppCompatActivity implements FavoriteAdap
         // 3) Chuyển sang trang Hiện tại (MainActivity)
         Intent it = new Intent(FavoritesActivity.this, MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        // Truyền cả 2 key cho chắc
         it.putExtra("SELECTED_LOCATION_ID", locationId);
         it.putExtra("location_id", locationId);
         startActivity(it);
