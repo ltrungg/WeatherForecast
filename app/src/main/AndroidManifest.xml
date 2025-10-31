@@ -57,5 +57,8 @@
         <activity
             android:name=".AboutActivity"
             android:exported="false" />
+
+        <activity android:name=".AiChatActivity"
+            android:exported="false"/>
     </application>
 </manifest>

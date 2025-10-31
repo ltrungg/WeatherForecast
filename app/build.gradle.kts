@@ -1,6 +1,18 @@
+// --- add imports cho Kotlin DSL ---
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
+
+// Đọc khóa từ local.properties ở ROOT project (cùng cấp settings.gradle)
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) {
+        f.inputStream().use { stream -> load(stream) }
+    }
+}
+val aiKey: String = localProps.getProperty("GOOGLE_AI_KEY") ?: ""
 
 android {
     namespace = "com.example.weatherforecast"
@@ -13,6 +25,9 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Xuất hằng BuildConfig.GOOGLE_AI_KEY cho code Java dùng
+        buildConfigField("String", "GOOGLE_AI_KEY", "\"$aiKey\"")
     }
 
     buildTypes {
@@ -23,6 +38,11 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+
+    // đảm bảo BuildConfig được sinh ra
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {
@@ -37,10 +57,14 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
 
+    // RecyclerView (phòng khi chưa kéo transitively)
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+
     // Retrofit/Gson/OkHttp
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
@@ -49,7 +73,7 @@ dependencies {
     // SwipeRefreshLayout
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 
-    // ✅ Google Play services – Location (bắt buộc cho FusedLocationProvider)
+    // Google Play services – Location
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // MPAndroidChart
