@@ -1,8 +1,10 @@
 package com.example.weatherforecast;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -15,24 +17,31 @@ import com.example.weatherforecast.data.WeatherRepository;
 import com.example.weatherforecast.network.ChartHelperHourly;
 import com.example.weatherforecast.network.DailyActivity;
 import com.example.weatherforecast.network.OpenMeteoClient;
+import com.example.weatherforecast.utils.Units;
 import com.github.mikephil.charting.charts.BarChart;
 import com.github.mikephil.charting.charts.LineChart;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import com.example.weatherforecast.AlertEvaluator;
 
 public class HourlyForecastActivity extends AppCompatActivity {
 
     public static final String EXTRA_LOCATION_ID = "LOCATION_ID";
 
+    private static final String PREFS = "settings";
+    private static final String KEY_TEMP_UNIT = "temp_unit";     // "C" | "F"
+    private static final String KEY_WIND_UNIT = "wind_unit";     // "kmh" | "mph"
+
     private TextView tvLocation, tvDate, tvTitle;
     private RecyclerView recyclerView;
     private MaterialButton btnList, btnChart;
-    private android.view.View chartContainer;
+    private View chartContainer;
     private LineChart tempChartHourly;
     private BarChart precipChartHourly;
 
@@ -40,7 +49,20 @@ public class HourlyForecastActivity extends AppCompatActivity {
     private HourlyAdapter adapter;
     private long locationId = -1L;
 
-    private List<WeatherRepository.HourlyEntry> currentHourly; // để vẽ chart
+    private List<WeatherRepository.HourlyEntry> currentHourly;
+
+    private SharedPreferences sp;
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefListener =
+            (prefs, key) -> {
+                if (KEY_TEMP_UNIT.equals(key) || KEY_WIND_UNIT.equals(key)) {
+                    if (adapter != null && currentHourly != null) {
+                        adapter.updateData(currentHourly);
+                    }
+                    if (chartContainer != null && chartContainer.getVisibility() == View.VISIBLE) {
+                        renderCharts();
+                    }
+                }
+            };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,8 +70,9 @@ public class HourlyForecastActivity extends AppCompatActivity {
         setContentView(R.layout.activity_hourly_forecast);
 
         repo = new WeatherRepository(this);
+        sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        sp.registerOnSharedPreferenceChangeListener(prefListener);
 
-        // Bind views
         tvTitle = findViewById(R.id.tvTitle);
         tvLocation = findViewById(R.id.tvLocation);
         tvDate = findViewById(R.id.tvDate);
@@ -62,22 +85,18 @@ public class HourlyForecastActivity extends AppCompatActivity {
 
         recyclerView = findViewById(R.id.recyclerView);
 
-        // Header
         tvTitle.setText("Dự báo theo giờ");
         String today = new SimpleDateFormat("EEEE, dd/MM/yyyy", new Locale("vi")).format(new Date());
         tvDate.setText(Character.toUpperCase(today.charAt(0)) + today.substring(1));
 
-        // RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         adapter = new HourlyAdapter(new java.util.ArrayList<>());
         recyclerView.setAdapter(adapter);
 
-        // Toggle actions
         btnList.setOnClickListener(v -> switchToList());
         btnChart.setOnClickListener(v -> switchToChart());
-        switchToList(); // mặc định mở tab danh sách
+        switchToList();
 
-        // BottomNav
         BottomNavigationView bottom = findViewById(R.id.bottomNav);
         bottom.setSelectedItemId(R.id.nav_hourly);
         bottom.setOnItemSelectedListener(item -> {
@@ -91,11 +110,10 @@ public class HourlyForecastActivity extends AppCompatActivity {
                 return true;
 
             } else if (id == R.id.nav_hourly) {
-                return true; // đang ở đây
+                return true;
 
             } else if (id == R.id.nav_daily) {
                 Intent it = new Intent(this, DailyActivity.class);
-                // gửi cả 2 key cho chắc
                 it.putExtra(EXTRA_LOCATION_ID, locId);
                 it.putExtra("location_id", locId);
                 startActivity(it);
@@ -115,30 +133,17 @@ public class HourlyForecastActivity extends AppCompatActivity {
             return false;
         });
 
-        // LOCATION_ID: nhận cả 2 key; nếu không có → tạo/lấy mặc định
         long fromIntent = getIntent().getLongExtra(EXTRA_LOCATION_ID, -1L);
         if (fromIntent == -1L)
             fromIntent = getIntent().getLongExtra("location_id", -1L);
+        locationId = (fromIntent == -1L) ? resolveOrCreateDefaultLocationId() : fromIntent;
 
-        if (fromIntent == -1L) {
-            locationId = resolveOrCreateDefaultLocationId();
-        } else {
-            locationId = fromIntent;
-        }
-
-        // Hiển thị tên địa điểm
         WeatherRepository.LocationInfo info = repo.getLocation(locationId);
-        if (info != null && info.name != null) {
-            tvLocation.setText(info.name);
-        }
+        if (info != null && info.name != null) tvLocation.setText(info.name);
 
-        // Load lần đầu từ DB
         loadHourly();
-
-        // Gọi API rồi tải lại (chạy nền để không block UI)
         refreshFromNetworkThenReload();
 
-        // Click item demo
         adapter.setOnItemClickListener(entry ->
                 Toast.makeText(this,
                         "Giờ " + new SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -150,31 +155,31 @@ public class HourlyForecastActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Đảm bảo nút "Theo giờ" được highlight khi quay lại
         BottomNavigationView bottom = findViewById(R.id.bottomNav);
-        if (bottom != null) {
-            bottom.setSelectedItemId(R.id.nav_hourly);
-        }
+        if (bottom != null) bottom.setSelectedItemId(R.id.nav_hourly);
     }
 
-    /** Đọc DB và hiển thị danh sách (và biểu đồ nếu tab Biểu đồ đang mở) */
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (sp != null) sp.unregisterOnSharedPreferenceChangeListener(prefListener);
+    }
+
     private void loadHourly() {
         List<WeatherRepository.HourlyEntry> list = repo.getHourlyForecast(locationId);
         currentHourly = list;
 
         if (list == null || list.isEmpty()) {
-            findViewById(R.id.emptyStateLayout).setVisibility(android.view.View.VISIBLE);
+            findViewById(R.id.emptyStateLayout).setVisibility(View.VISIBLE);
         } else {
-            findViewById(R.id.emptyStateLayout).setVisibility(android.view.View.GONE);
+            findViewById(R.id.emptyStateLayout).setVisibility(View.GONE);
             adapter.updateData(list);
-            // Nếu đang ở tab Biểu đồ thì render ngay
-            if (chartContainer.getVisibility() == android.view.View.VISIBLE) {
+            if (chartContainer.getVisibility() == View.VISIBLE) {
                 renderCharts();
             }
         }
     }
 
-    /** Gọi API ở background rồi đọc lại DB */
     private void refreshFromNetworkThenReload() {
         new Thread(() -> {
             WeatherRepository.LocationInfo li = repo.getLocation(locationId);
@@ -186,14 +191,15 @@ public class HourlyForecastActivity extends AppCompatActivity {
                         locationId,
                         repo
                 );
+                AlertEvaluator.evaluateAndNotify(getApplicationContext(), locationId);
             }
             runOnUiThread(this::loadHourly);
         }).start();
     }
 
     private void switchToList() {
-        recyclerView.setVisibility(android.view.View.VISIBLE);
-        chartContainer.setVisibility(android.view.View.GONE);
+        recyclerView.setVisibility(View.VISIBLE);
+        chartContainer.setVisibility(View.GONE);
 
         btnList.setBackgroundResource(R.drawable.toggle_button_selected);
         btnList.setTextColor(Color.WHITE);
@@ -202,8 +208,8 @@ public class HourlyForecastActivity extends AppCompatActivity {
     }
 
     private void switchToChart() {
-        recyclerView.setVisibility(android.view.View.GONE);
-        chartContainer.setVisibility(android.view.View.VISIBLE);
+        recyclerView.setVisibility(View.GONE);
+        chartContainer.setVisibility(View.VISIBLE);
 
         btnChart.setBackgroundResource(R.drawable.toggle_button_selected);
         btnChart.setTextColor(Color.WHITE);
@@ -215,12 +221,17 @@ public class HourlyForecastActivity extends AppCompatActivity {
 
     private void renderCharts() {
         if (currentHourly == null || currentHourly.isEmpty()) return;
-        // Hiển thị 24 giờ đầu; đổi 48 nếu muốn
-        ChartHelperHourly.setupTemperatureChartHourly(tempChartHourly, currentHourly, 24);
+        boolean useF = Units.useF(this);
+
+        // Dữ liệu truyền vào ChartHelperHourly vẫn theo chữ ký cũ (3 tham số).
+        // Nếu chọn °F, tạo bản sao với nhiệt độ đã quy đổi.
+        List<WeatherRepository.HourlyEntry> chartData =
+                useF ? cloneHourlyAsF(currentHourly) : currentHourly;
+
+        ChartHelperHourly.setupTemperatureChartHourly(tempChartHourly, chartData, 24);
         ChartHelperHourly.setupPrecipitationChartHourly(precipChartHourly, currentHourly, 24);
     }
 
-    /** Đảm bảo luôn có 1 locationId hợp lệ */
     private long resolveOrCreateDefaultLocationId() {
         WeatherRepository r = new WeatherRepository(this);
         long id = r.getCurrentLocationIdOrAny();
@@ -229,5 +240,30 @@ public class HourlyForecastActivity extends AppCompatActivity {
                 "Hồ Chí Minh", "VN", null, null,
                 10.776, 106.700, "Asia/Ho_Chi_Minh", true
         );
+    }
+
+    // ===== Helpers chuyển đơn vị cho biểu đồ giờ =====
+    private static double cToF(double c) { return c * 9 / 5.0 + 32.0; }
+
+    private List<WeatherRepository.HourlyEntry> cloneHourlyAsF(List<WeatherRepository.HourlyEntry> src) {
+        List<WeatherRepository.HourlyEntry> out = new ArrayList<>(src.size());
+        for (WeatherRepository.HourlyEntry h : src) {
+            WeatherRepository.HourlyEntry x = new WeatherRepository.HourlyEntry();
+            x.ts = h.ts;
+            x.tempC = cToF(h.tempC);                // đổi sang °F
+            x.humidity = h.humidity;
+            x.windMps  = h.windMps;
+            x.windDeg  = h.windDeg;
+            x.clouds   = h.clouds;
+            x.popPct   = h.popPct;
+            x.precipMm = h.precipMm;
+            x.uvi      = h.uvi;
+            x.pressure = h.pressure;
+            x.code = h.code;
+            x.text = h.text;
+            x.icon = h.icon;
+            out.add(x);
+        }
+        return out;
     }
 }

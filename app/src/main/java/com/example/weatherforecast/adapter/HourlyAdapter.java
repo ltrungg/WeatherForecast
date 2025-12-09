@@ -1,5 +1,7 @@
 package com.example.weatherforecast.adapter;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -85,12 +87,19 @@ public class HourlyAdapter extends RecyclerView.Adapter<HourlyAdapter.HourlyView
         }
 
         public void bind(WeatherRepository.HourlyEntry hourlyEntry) {
-            // Format time
+            Context ctx = itemView.getContext();
+            SharedPreferences sp = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE);
+            boolean useF = "F".equals(sp.getString("temp_unit", "C"));
+            boolean useMph = "mph".equals(sp.getString("wind_unit", "kmh"));
+
+            // Time
             String timeText = formatTime(hourlyEntry.ts);
             tvTime.setText(timeText);
 
-            // Temperature
-            tvTemperature.setText(String.format(Locale.getDefault(), "%.0f°", hourlyEntry.tempC));
+            // Temperature (C or F)
+            double tempDisplay = hourlyEntry.tempC;
+            if (useF) tempDisplay = tempDisplay * 9 / 5.0 + 32.0;
+            tvTemperature.setText(String.format(Locale.getDefault(), "%.0f°", tempDisplay));
 
             // Precipitation probability
             if (hourlyEntry.popPct != null && hourlyEntry.popPct > 0) {
@@ -115,12 +124,16 @@ public class HourlyAdapter extends RecyclerView.Adapter<HourlyAdapter.HourlyView
                 tvHumidity.setText("--%");
             }
 
-            // Wind speed
+            // Wind speed (km/h or mph)
             if (hourlyEntry.windMps != null) {
-                double windKmh = hourlyEntry.windMps * 3.6; // Convert m/s to km/h
-                tvWind.setText(String.format(Locale.getDefault(), "%.0f km/h", windKmh));
+                double windKmh = hourlyEntry.windMps * 3.6;
+                if (useMph) {
+                    tvWind.setText(String.format(Locale.getDefault(), "%.0f mph", windKmh * 0.621371));
+                } else {
+                    tvWind.setText(String.format(Locale.getDefault(), "%.0f km/h", windKmh));
+                }
             } else {
-                tvWind.setText("-- km/h");
+                tvWind.setText(useMph ? "-- mph" : "-- km/h");
             }
 
             // Weather icon
@@ -130,76 +143,53 @@ public class HourlyAdapter extends RecyclerView.Adapter<HourlyAdapter.HourlyView
         private String formatTime(long timestamp) {
             long currentTime = System.currentTimeMillis() / 1000;
             long diffHours = (timestamp - currentTime) / 3600;
-
-            if (diffHours == 0) {
-                return "Bây giờ";
-            } else {
-                SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
-                return sdf.format(new Date(timestamp * 1000L));
-            }
+            if (diffHours == 0) return "Bây giờ";
+            SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
+            return sdf.format(new Date(timestamp * 1000L));
         }
 
         private void setWeatherIcon(String weatherCode) {
             if (weatherCode == null || weatherCode.isEmpty()) {
-                // Set default cloud emoji
                 ivWeatherIcon.setText("☁️");
                 return;
             }
-
             try {
                 int code = Integer.parseInt(weatherCode);
-
-                // Map weather codes to emoji icons
                 String emojiIcon = getWeatherEmojiIcon(code);
                 ivWeatherIcon.setText(emojiIcon);
-
             } catch (NumberFormatException e) {
                 ivWeatherIcon.setText("☁️");
             }
         }
 
         private String getWeatherEmojiIcon(int weatherCode) {
-            // Open-Meteo weather codes mapping to emoji icons
             switch (weatherCode) {
-                case 0: // Clear sky
-                    return "☀️";
+                case 0: return "☀️";
                 case 1:
                 case 2:
-                case 3: // Mainly clear, partly cloudy, overcast
-                    return "⛅";
+                case 3: return "⛅";
                 case 45:
-                case 48: // Fog and depositing rime fog
-                    return "🌫️";
+                case 48: return "🌫️";
                 case 51:
                 case 53:
-                case 55: // Drizzle
-                    return "🌦️";
+                case 55: return "🌦️";
                 case 61:
                 case 63:
-                case 65: // Rain
-                    return "🌧️";
+                case 65: return "🌧️";
                 case 71:
                 case 73:
-                case 75: // Snow fall
-                    return "❄️";
-                case 77: // Snow grains
-                    return "🌨️";
+                case 75: return "❄️";
+                case 77: return "🌨️";
                 case 80:
                 case 81:
-                case 82: // Rain showers
-                    return "🌦️";
+                case 82: return "🌦️";
                 case 85:
-                case 86: // Snow showers
-                    return "🌨️";
-                case 95: // Thunderstorm
-                    return "⛈️";
+                case 86: return "🌨️";
+                case 95:
                 case 96:
-                case 99: // Thunderstorm with slight and heavy hail
-                    return "⛈️";
-                default:
-                    return "☁️";
+                case 99: return "⛈️";
+                default: return "☁️";
             }
         }
     }
 }
-

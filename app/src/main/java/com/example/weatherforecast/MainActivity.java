@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvWindValue, tvHumidityValue, tvVisibilityValue, tvPressureValue;
     private TextView tvSunriseTime, tvSunsetTime;
     private ScrollView scrollMain;
+    private com.google.android.material.floatingactionbutton.FloatingActionButton fabChat;
     private BottomNavigationView bottomNavigationView;
 
     // ===== Perms / threading =====
@@ -88,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
         initStaticHeader();
         initBottomNav();
         initPermissionsLaunchers();
+        initChatbotButton();
 
         requestNeededPermissionsThenLoad();
 
@@ -119,6 +121,7 @@ public class MainActivity extends AppCompatActivity {
         tvSunsetTime = findViewById(R.id.tvSunsetTime);
 
         bottomNavigationView = findViewById(R.id.bottomNavigation);
+        fabChat = findViewById(R.id.fabChat);
     }
 
     private void initStaticHeader() {
@@ -135,7 +138,6 @@ public class MainActivity extends AppCompatActivity {
             long locId = resolveOrGetExistingLocationId(); // KHÔNG tạo mặc định
 
             if (id == R.id.nav_now) {
-                // Ở ngay trang hiện tại: cuộn lên đầu
                 scrollMain.smoothScrollTo(0, 0);
                 return true;
             }
@@ -175,6 +177,22 @@ public class MainActivity extends AppCompatActivity {
             }
 
             return false;
+        });
+    }
+
+    private void initChatbotButton() {
+        fabChat.setOnClickListener(v -> {
+            // Lấy id của vị trí hiện tại để gửi sang cho ChatbotActivity
+            long currentLocId = resolveOrGetExistingLocationId();
+            if (currentLocId == -1) {
+                Toast.makeText(this, "Vui lòng chọn hoặc thêm một vị trí trước khi hỏi AI.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            Intent intent = new Intent(MainActivity.this, ChatbotActivity.class);
+            // Gửi ID vị trí sang, Chatbot sẽ dùng nó để lấy dữ liệu thời tiết
+            intent.putExtra("location_id", currentLocId);
+            startActivity(intent);
         });
     }
 
@@ -218,7 +236,6 @@ public class MainActivity extends AppCompatActivity {
                 boolean auto = sp.getBoolean(KEY_AUTO_LOC, true);
 
                 if (!auto) {
-                    // Dùng vị trí đang đánh dấu current trong DB
                     long id = repo.getCurrentLocationIdOrAny();
                     if (id == -1) {
                         main.post(() -> Toast.makeText(
@@ -249,11 +266,10 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if (loc == null) {
-                    // Fallback sang DB nếu đã lưu vị trí
                     long id = repo.getCurrentLocationIdOrAny();
                     if (id != -1) {
                         currentLocationId = id;
-                        renderFromDb(id); // render nhanh dữ liệu hiện có
+                        renderFromDb(id);
                         WeatherRepository.LocationInfo li = repo.getLocation(id);
                         if (li != null) {
                             new OpenMeteoClient().fetchAndStore(
@@ -266,7 +282,6 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
 
-                    // Không có GPS và cũng không có vị trí trong DB
                     main.post(() -> Toast.makeText(
                             MainActivity.this,
                             "Không thể lấy vị trí hiện tại. Hãy bật GPS/cấp quyền hoặc chọn vị trí trong Yêu thích.",
@@ -354,7 +369,6 @@ public class MainActivity extends AppCompatActivity {
                     String district = !subAdmin.isEmpty() ? subAdmin : (!locality.isEmpty() ? locality : "");
                     String province = !admin.isEmpty() ? admin : "";
                     if (!province.isEmpty()) {
-                        // Chuẩn hóa vài tên thường gặp
                         province = province.replace("Thành phố Hồ Chí Minh", "TP. Hồ Chí Minh")
                                 .replace("Thành phố Hà Nội", "Hà Nội");
                     }
@@ -363,7 +377,6 @@ public class MainActivity extends AppCompatActivity {
                     if (!district.isEmpty()) return district;
                     return "Việt Nam";
                 } else {
-                    // Ngoài VN
                     if (!locality.isEmpty() && !admin.isEmpty()) return locality + ", " + admin;
                     if (!admin.isEmpty() && a.getCountryName() != null) return admin + ", " + a.getCountryName();
                     if (a.getCountryName() != null) return a.getCountryName();
@@ -403,6 +416,7 @@ public class MainActivity extends AppCompatActivity {
         WeatherRepository.CurrentWeatherData cur = repo.getCurrentWeather(locationId);
         java.util.List<WeatherRepository.DailyForecastData> daily = repo.getDailyForecast(locationId);
 
+        final WeatherRepository.CurrentWeatherData curFinal = cur;
         main.post(() -> {
             // Tên địa điểm
             tvCity.setText(info != null && info.name != null ? info.name : "Vị trí của tôi");
@@ -417,8 +431,8 @@ public class MainActivity extends AppCompatActivity {
             String windUnit = sp.getString(KEY_WIND_UNIT, "kmh"); // "kmh" | "mph"
 
             // Nhiệt độ hiện tại
-            if (cur != null && cur.tempC != null) {
-                double t = cur.tempC;
+            if (curFinal != null && curFinal.tempC != null) {
+                double t = curFinal.tempC;
                 String tStr = tempUnit.equals("F")
                         ? String.format(Locale.getDefault(), "%.0f°", (t * 9 / 5) + 32)
                         : String.format(Locale.getDefault(), "%.0f°", t);
@@ -428,7 +442,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             // Mô tả
-            tvDescription.setText(cur != null && cur.condition != null ? cur.condition : "");
+            tvDescription.setText(curFinal != null && curFinal.condition != null ? curFinal.condition : "");
 
             // Cao/Thấp + Bình minh/Hoàng hôn (ngày 1)
             if (daily != null && !daily.isEmpty()) {
@@ -465,8 +479,8 @@ public class MainActivity extends AppCompatActivity {
             }
 
             // Gió
-            if (cur != null && (cur.windKmh != null || cur.windMps != null)) {
-                double kmh = cur.windKmh != null ? cur.windKmh : (cur.windMps * 3.6);
+            if (curFinal != null && (curFinal.windKmh != null || curFinal.windMps != null)) {
+                double kmh = curFinal.windKmh != null ? curFinal.windKmh : (curFinal.windMps * 3.6);
                 String wind = windUnit.equals("mph")
                         ? String.format(Locale.getDefault(), "%.0f mph", kmh * 0.621371)
                         : String.format(Locale.getDefault(), "%.0f km/h", kmh);
@@ -474,16 +488,16 @@ public class MainActivity extends AppCompatActivity {
             } else tvWindValue.setText("--");
 
             // Độ ẩm
-            tvHumidityValue.setText(cur != null && cur.humidity != null
-                    ? String.format(Locale.getDefault(), "%.0f%%", cur.humidity) : "--");
+            tvHumidityValue.setText(curFinal != null && curFinal.humidity != null
+                    ? String.format(Locale.getDefault(), "%.0f%%", curFinal.humidity) : "--");
 
             // Tầm nhìn
-            tvVisibilityValue.setText(cur != null && cur.visibilityKm != null
-                    ? String.format(Locale.getDefault(), "%.0f km", cur.visibilityKm) : "--");
+            tvVisibilityValue.setText(curFinal != null && curFinal.visibilityKm != null
+                    ? String.format(Locale.getDefault(), "%.0f km", curFinal.visibilityKm) : "--");
 
-            // Hiển thị lượng mưa (mm) thay vì áp suất
-            tvPressureValue.setText(cur != null && cur.precipMm != null
-                    ? String.format(Locale.getDefault(), "%.1f mm", cur.precipMm)
+            // Lượng mưa (mm) — đang tận dụng tvPressureValue để hiển thị mưa
+            tvPressureValue.setText(curFinal != null && curFinal.precipMm != null
+                    ? String.format(Locale.getDefault(), "%.1f mm", curFinal.precipMm)
                     : "-- mm");
 
             // Icon demo
@@ -517,7 +531,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // đảm bảo tab "Hiện tại" luôn được chọn khi quay lại
         if (bottomNavigationView != null) {
             bottomNavigationView.setSelectedItemId(R.id.nav_now);
         }
@@ -527,7 +540,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        // không gọi loadWeatherWithBestEffort() ở đây theo diff
     }
 
     @Override

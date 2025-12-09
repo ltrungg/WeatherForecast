@@ -39,11 +39,12 @@ public class ChartHelperHourly {
             SimpleDateFormat hh = new SimpleDateFormat("HH:mm", Locale.getDefault());
             for (int i = 0; i < n; i++) {
                 WeatherRepository.HourlyEntry e = data.get(i);
-                tempEntries.add(new Entry(i, (float) e.tempC));
+                tempEntries.add(new Entry(i, (float) e.tempC)); // e.tempC có thể đã là °F nếu Activity quy đổi
                 labels.add(hh.format(new Date(e.ts * 1000L)));
             }
 
-            LineDataSet tempSet = new LineDataSet(tempEntries, "Nhiệt độ (°C)");
+            // Label bỏ đơn vị để dùng chung cho °C/°F
+            LineDataSet tempSet = new LineDataSet(tempEntries, "Nhiệt độ");
             tempSet.setColor(Color.parseColor("#000000"));
             tempSet.setLineWidth(3f);
             tempSet.setCircleColor(Color.parseColor("#000000"));
@@ -60,7 +61,7 @@ public class ChartHelperHourly {
             x.setPosition(XAxis.XAxisPosition.BOTTOM);
             x.setValueFormatter(new IndexAxisValueFormatter(labels));
             x.setGranularity(1f);
-            x.setLabelCount(Math.min(8, labels.size())); // tránh quá dày
+            x.setLabelCount(Math.min(8, labels.size()));
             x.setTextSize(11f);
             x.setTextColor(Color.parseColor("#333333"));
             x.setDrawGridLines(true);
@@ -108,9 +109,9 @@ public class ChartHelperHourly {
                 WeatherRepository.HourlyEntry e = data.get(i);
                 float v;
                 if (e.popPct != null) {
-                    v = e.popPct.floatValue(); // %
+                    v = e.popPct.floatValue();
                 } else if (e.precipMm != null) {
-                    v = Math.min(e.precipMm.floatValue() * 30f, 100f); // quy đổi gần đúng
+                    v = Math.min(e.precipMm.floatValue() * 30f, 100f);
                 } else {
                     v = 0f;
                 }
@@ -144,7 +145,7 @@ public class ChartHelperHourly {
             left.setTextSize(12f);
             left.setTextColor(Color.parseColor("#333333"));
             left.setAxisMinimum(0f);
-            left.setAxisMaximum(100f); // %
+            left.setAxisMaximum(100f);
             left.setLabelCount(6, true);
             left.setDrawGridLines(true);
             left.setGridColor(Color.parseColor("#E0E0E0"));
