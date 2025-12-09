@@ -44,7 +44,7 @@ public class ChatbotActivity extends AppCompatActivity {
             return;
         }
 
-        String myApiKey = "AIzaSyC6ltuiyGVhzaL-gPaUMe50sBXCGXGcpuA";
+        String myApiKey = "AiBietDau";
         aiHelper = new GeminiAiHelper(this, myApiKey);
 
         recyclerViewChat = findViewById(R.id.recyclerViewChat);
